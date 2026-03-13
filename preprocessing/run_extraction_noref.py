@@ -1,7 +1,5 @@
 import argparse
 import csv
-from datetime import datetime
-import json
 import numpy as np
 from pathlib import Path
 import sys
@@ -37,7 +35,6 @@ def main():
 
     skip_secs  = 5
     batch_size = 32
-    max_points = None  # Max samples for tensors_to_array(); None = all
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Input:  {input_root}")
@@ -115,28 +112,6 @@ def main():
         writer.writeheader()
         writer.writerows(index_rows)
     print(f"[index] {index_csv}")
-
-    # --- Save combined array and metadata ---
-    print("[info] Building combined feature array...")
-    X, ids = utils.tensors_to_array(dataloader=loader, transform=logmel_transf, max_pts=max_points, device=device)
-
-    X_folder = output_root / "numpy_arrays"
-    X_folder.mkdir(parents=True, exist_ok=True)
-    X_path = X_folder / "logmel_features.npz"
-
-    np.savez_compressed(X_path, X=X, ids=ids)
-
-    meta = {
-        "specgram_config": str(specgram_config),
-        "max_points":      max_points,
-        "dtype":           str(X.dtype),
-        "shape":           list(X.shape),
-        "created":         datetime.now().isoformat(),
-    }
-    with open(str(X_path) + ".meta.json", "w") as f:
-        json.dump(meta, f, indent=2)
-
-    print(f"[done] Saved array {X.shape} -> {X_path}")
 
 
 if __name__ == "__main__":

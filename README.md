@@ -1,24 +1,65 @@
-Take raw .wav audiofiles and place in a directory (e.g. datadictionary) besides the other directories. 
+# Detecting Narwhals
 
-open terminal and navigate to the Detecting-Narwhals directory.
+Preprocess raw .wav audio into .npz feature files and metadata 
 
-setup a conda environment with the packages specified in the environment.yml file
-This will create a conda environment called "narwhal_env":
+## Guide for using some of the implementations
 
-conda env create -f environment.yml 
+### 1) Put your input audio files in a folder
 
-then activate the newly created environment:
+Create a directory for raw .wav files (example: datadictionary) in the project folder:
 
-conda activate narwhal_env
 
-Then use preprocessing/run_extraction_noref.py with the specified --input-root --output-root 
-and optional subset-len to take subset of audiofiles.
-for example using the first 20 audiofiles only running on a macbook:
+Detecting-Narwhals/  
+----datadictionary/  
+--------audiofile1.wav  
+--------audiofile2.wav  
+--------...  
+--------audiofileN.wav  
+----preprocessing/  
+----analysis/  
+----utilities/  
+----environment.yml  
+----README.md  
 
-  Python preprocessing/run_extraction_noref.py \
-      --input-root datadictionary \
-      --output-root processedDataNPZFiles \
-      --subset-len 20
+### 2) Open a terminal in the project root
 
-This will produce npz files and metadata which can be used for different purposes.
-  
+
+\$cd /Users/johan/uni/bachelor/Detecting-Narwhals
+
+
+### 3) Create and activate the Conda environment
+
+This uses the packages in environment.yml and creates narwhal_env:
+
+
+\$conda env create -f environment.yml  
+\$conda activate narwhal_env
+
+
+### 4) Run preprocessing / feature extraction
+
+Use preprocessing/run_extraction_noref.py with required arguments:
+
+- --input-root: folder with .wav files  
+- --output-root: destination for generated .npz + metadata  
+- --subset-len (optional): process only first N files
+
+Example (first 20 files on a macbook):
+
+
+python preprocessing/run_extraction_noref.py \
+  --input-root datadictionary \
+  --output-root processedDataNPZFiles \
+  --subset-len 20
+
+
+## Output
+
+After running extraction, the output directory contains:
+
+- .npz feature files
+- metadata files for the .npz files
+
+These outputs can be used later on
+
+
