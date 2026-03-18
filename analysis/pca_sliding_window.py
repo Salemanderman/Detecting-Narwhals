@@ -1,4 +1,7 @@
 """
+Computes PCA on a sliding window across the full log-mel spectrogram.
+Computes PCA with n_components components and saves the results.
+NB: Only plots the 2 most significant components, even though there are more.
 Use for example:
     python analysis/pca_sliding_window.py \
         --input-root  inputDataDictionary/Aug_6229 \
@@ -166,18 +169,17 @@ def main():
         sys.exit(1)
 
     X = np.stack(feature_rows, axis=0)
-    print(f"\nFeature matrix: {X.shape}  (windows × features)")
+    print(f"Feature matrix: {X.shape}  (windows × features)")
 
     # PCA with numpy
     n_components = min(args.n_components, X.shape[0], X.shape[1])
-    print(f"Running PCA  ({n_components} components)...")
+    print(f"Running PCA")
 
     X_pca, components, pca_mean, evr = numpy_pca(X, n_components)
 
     print(f"Variance explained: "
-          f"PC1={evr[0]*100:.1f}%  "
-          f"PC2={evr[1]*100:.1f}%  "
-          f"PC3={evr[2]*100:.1f}%  ")
+          f"PC1={evr[0]*100:.1f}% "
+          f"PC2={evr[1]*100:.1f}% ")
 
     # Save PCA results and metadata
     out_npz = output_root / "pca_results.npz"

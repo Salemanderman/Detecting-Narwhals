@@ -287,6 +287,7 @@ def plot_pca_projection_single(X_pca, evr, window_meta, output_path):
 
     source_file = window_meta[0]["file"] if window_meta else "Unknown"
     n_windows = X_pca.shape[0]
+    print(f"shape of X_pca: {X_pca.shape}, n_windows: {n_windows}")
 
     cmap = plt.get_cmap("tab20", max(n_windows, 1))
     ax.scatter(X_pca[:, 0], X_pca[:, 1], s=5, alpha=0.6,
