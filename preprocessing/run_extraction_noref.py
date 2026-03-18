@@ -34,7 +34,7 @@ def main():
     subset_len = args.subset_len
 
     start_secs  = 5 # Skip first 5 seconds of each recording due to corruption.
-    end_secs = 265 #cut off endings so each file is same length
+    end_secs = 265 # Cut off endings so each file is same length
     batch_size = 32
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -42,21 +42,21 @@ def main():
     print(f"Output: {output_root}")
     print(f"Device: {device}")
 
-    # --- Dataset and dataloader ---
+    # Setup dataset and dataloader
     dataset = utils.AudioDataset(input_root, target_sr=64_000, start_secs=start_secs, end_secs=end_secs)
     if subset_len > 0:
         dataset = Subset(dataset, list(range(min(subset_len, len(dataset))))) # takes first N samples
     loader  = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=utils.max_len_collate) # Only shuffle data when training.
-    print(f"Files:   {len(dataset)}")
+    print(f"Files: {len(dataset)}")
     print(f"Batches: {len(loader)}")
 
-    # --- Log-mel transform ---
+    # Perform log-mel spectrogram transformation
     specgram_config = configs.get_specgram_config()
     logmel_transf   = utils.PipelineSpecgram(specgram_config=specgram_config).to(device)
     logmel_transf.eval()
     print(f"Specgram config: {specgram_config}")
 
-    # --- Feature extraction ---
+    # Extract features and save to NPZ files and metadata
     index_rows = []
 
     with torch.no_grad():
@@ -106,7 +106,7 @@ def main():
 
     print(f"[done] Extracted features for {len(index_rows)} files.")
 
-    # --- Save index CSV ---
+    # Save index CSV
     index_csv = output_root / "features_index.csv"
     with index_csv.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["source_path", "feature_path", "sr", "shape"])
