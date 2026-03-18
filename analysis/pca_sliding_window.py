@@ -24,7 +24,6 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from sklearn.decomposition import PCA
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -78,23 +77,7 @@ def numpy_pca(X: np.ndarray, n_components: int):
 
     return X_pca, components, mean, evr[:k]
 
-def sklearn_pca(X: np.ndarray, n_components: int):
-    """
-    PCA using sklearn on X (N, D).
-    Returns:
-        X_pca:     (N, n_components) projected data
-        components:(n_components, D) principal axes (unit vectors)
-        mean:      (D,) column means used for centring
-        explained_variance_ratio: (n_components,)
-    """
-    pca = PCA(n_components=n_components)
-    X_pca = pca.fit_transform(X)
 
-    components = pca.components_  # (n_components, D)
-    mean = pca.mean_              # (D,)
-    evr = pca.explained_variance_ratio_  # (n_components,)
-
-    return X_pca, components, mean, evr
 
 
 # Main function:
@@ -169,14 +152,14 @@ def main():
             feat = window_feature(win)
             feature_rows.append(feat)
             window_meta.append({
-                "file":        npz_path.name,
+                "file": npz_path.name,
                 "start_frame": int(start_frame),
-                "start_sec":   round(start_frame * secs_per_frame, 3),
+                "start_sec": round(start_frame * secs_per_frame, 3),
             })
             n_windows += 1
         if (i+1) % 10 == 0:
             print(f"  {i+1}/{len(npz_files)} processed")
-        # print(f"  {npz_path.name}: T={S.shape[1]} frames, {n_windows} windows")
+        # print(f"{npz_path.name}: T={S.shape[1]} frames, {n_windows} windows")
 
     if not feature_rows:
         print("[error] No windows extracted. Check window/stride settings vs recording length.")
@@ -191,11 +174,10 @@ def main():
 
     X_pca, components, pca_mean, evr = numpy_pca(X, n_components)
 
-    cumulative_evr = np.cumsum(evr)
     print(f"Variance explained: "
           f"PC1={evr[0]*100:.1f}%  "
-          f"PC1+PC2={cumulative_evr[1]*100:.1f}%  "
-          f"Top-{n_components}={cumulative_evr[-1]*100:.1f}%")
+          f"PC2={evr[1]*100:.1f}%  "
+          f"PC3={evr[2]*100:.1f}%  ")
 
     # Save PCA results and metadata
     out_npz = output_root / "pca_results.npz"
@@ -205,25 +187,23 @@ def main():
         components = components,
         pca_mean = pca_mean,
         evr = evr,
-        cumulative_evr = cumulative_evr,
         X_raw = X,
     )
 
     meta = {
-        "created":       datetime.now().isoformat(),
-        "input_root":    str(input_root),
-        "window_secs":   window_secs,
-        "stride_secs":   stride_secs,
+        "created": datetime.now().isoformat(),
+        "input_root": str(input_root),
+        "window_secs": window_secs,
+        "stride_secs": stride_secs,
         "window_frames": window_frames,
         "stride_frames": stride_frames,
-        "mel_start":     mel_start,
-        "mel_end":       mel_end,
-        "n_mels":        n_mels,
-        "n_components":  int(n_components),
-        "n_windows":     int(X.shape[0]),
-        "feature_dim":   int(X.shape[1]),
-        "evr_top10":     [float(v) for v in evr[:10]],
-        "files":         [p.name for p in npz_files],
+        "mel_start": mel_start,
+        "mel_end": mel_end,
+        "n_mels": n_mels,
+        "n_components": int(n_components),
+        "n_windows": int(X.shape[0]),
+        "feature_dim": int(X.shape[1]),
+        "files": [p.name for p in npz_files],
     }
     
     with open(output_root / "pca_meta.json", "w") as f:
@@ -231,14 +211,14 @@ def main():
 
     # Save window metadata (file + time offset per row).
     meta_npz = output_root / "window_index.npz"
-    files_arr = np.array([m["file"] for m in window_meta], dtype=object)
-    starts_arr = np.array([m["start_frame"] for m in window_meta], dtype=np.int64)
-    secs_arr = np.array([m["start_sec"] for m in window_meta], dtype=np.float32)
+    files_arr = np.array([window["file"] for window in window_meta], dtype=object)
+    starts_arr = np.array([window["start_frame"] for window in window_meta], dtype=np.int64)
+    secs_arr = np.array([window["start_sec"] for window in window_meta], dtype=np.float32)
     np.savez_compressed(meta_npz, files=files_arr, start_frames=starts_arr, start_secs=secs_arr)
 
-    print(f"\nSaved -> {out_npz}")
-    print(f"Saved -> {meta_npz}")
-    print(f"Saved -> {output_root / 'pca_meta.json'}")
+    print(f"\nSaved to {out_npz}")
+    print(f"Saved to {meta_npz}")
+    print(f"Saved to {output_root / 'pca_meta.json'}")
 
     # Save plots of pca
 
@@ -248,10 +228,8 @@ def main():
             putils.plot_pca_projection_single(X_pca, evr, window_meta, plot_path)
         else:
             putils.plot_pca_projection(X_pca, evr, window_meta, plot_path)
-        print(f"Saved -> {plot_path}")
 
-    print("\n[done]")
-
+        print(f"Saved to {plot_path}")
 
 if __name__ == "__main__":
     main()
