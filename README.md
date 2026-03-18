@@ -3,7 +3,10 @@
 Preprocess raw .wav audio into .npz feature files and metadata 
 
 ## Guide for preprocessing .wav files to .npz files
-
+### 0) Navigate to your desired working directory and clone repository
+```bash
+$ git clone https://github.com/Salemanderman/Detecting-Narwhals.git
+```
 ### 1) Put your input audio files in a folder
 
 Create a directory for raw .wav files (example: datadictionary) in the project folder:
