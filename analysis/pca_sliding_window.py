@@ -63,7 +63,7 @@ def numpy_pca(X: np.ndarray, n_components: int):
         explained_variance_ratio: (n_components,)
     """
     mean = X.mean(axis=0)
-    Xcentered = X - mean                                          # centred
+    Xcentered = X - mean # centred
 
     # SVD on the centred matrix; economy form keeps at most min(N,D) singular values.
     U, s, Vt = np.linalg.svd(Xcentered, full_matrices=False)

@@ -91,5 +91,26 @@ $ python analysis/pca_sliding_window.py \
 ```
 If just a single file, add the --single-file and provide the filename
 
-Now it produces 
+This will produce a pca plot of the file(s) provided in the pca_sliding_window along with metadata
+
+## plot 5-second segments of a file
+
+Again stay or go to the directory Detecting-Narwhals and run the plot_spectrogram_window program
+
+```bash
+python analysis/plot_spectrogram_windows.py \
+        --input-root  processedDataNPZFiles \
+        --output-root analysis/spectrogram_windows_plot \
+        --window-secs 5 \
+        --stride-secs 2.5 \
+        --mel-start 9 --mel-end 61 \
+        --max-per-file 20 \
+        --cols 4
+```
+
+This will produce the 20 first windows of the npz file and plot them. 
+
+
+
+
 
