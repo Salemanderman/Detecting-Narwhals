@@ -33,7 +33,8 @@ def main():
     output_root.mkdir(parents=True, exist_ok=True)
     subset_len = args.subset_len
 
-    skip_secs  = 5
+    start_secs  = 5 # Skip first 5 seconds of each recording due to corruption.
+    end_secs = 265 #cut off endings so each file is same length
     batch_size = 32
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -42,14 +43,14 @@ def main():
     print(f"Device: {device}")
 
     # --- Dataset and dataloader ---
-    dataset = utils.AudioDataset(input_root, target_sr=64_000, skip_secs=skip_secs, mode="crop", max_secs=None)
+    dataset = utils.AudioDataset(input_root, target_sr=64_000, start_secs=start_secs, end_secs=end_secs)
     if subset_len > 0:
         dataset = Subset(dataset, list(range(min(subset_len, len(dataset))))) # takes first N samples
     loader  = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=utils.max_len_collate) # Only shuffle data when training.
     print(f"Files:   {len(dataset)}")
     print(f"Batches: {len(loader)}")
 
-    # --- Log-mel transform pipeline ---
+    # --- Log-mel transform ---
     specgram_config = configs.get_specgram_config()
     logmel_transf   = utils.PipelineSpecgram(specgram_config=specgram_config).to(device)
     logmel_transf.eval()

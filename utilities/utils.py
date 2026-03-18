@@ -19,14 +19,13 @@ class AudioDataset(Dataset):
             "paths": str, path to the audio file.
             "lengths": int, original length of each waveform before padding.
     """
-    def __init__(self, root_dir, target_sr=64000, skip_secs=5, mode="crop", max_secs=None):
+    def __init__(self, root_dir, target_sr=64000, start_secs=5, end_secs=None):
         self.root_dir = Path(root_dir) # Root data folder.
         self.files = list(self.root_dir.rglob("*.wav")) # Searches for pattern in subfolders.
         self.target_sr = target_sr # Can change from original raw 64 kHz to common 16 kHz.
-        self.skip_secs = skip_secs # Skip a recording's first corrupted seconds.
-        self.mode = mode # "crop" or "mute" the corrupted recording segment.
+        self.start_secs = start_secs # Skip a recording's first corrupted seconds.
         # self.max_frames = int(target_sr * max_secs) if max_secs else None # Truncation for plotting.
-        self.max_secs = max_secs
+        self.end_secs = end_secs
 
     def __len__(self):
         return len(self.files)
@@ -39,21 +38,15 @@ class AudioDataset(Dataset):
         # and is recorded at sample rate = 64 kHz.
         
         # Skip corrupted beginning of every recording.
-        s_idx = int(self.skip_secs * sr)
-        if self.mode == "crop":
-            wf = wf[:, s_idx:] if wf.shape[1] > s_idx else torch.zeros((wf.shape[0], 1))
-        elif self.mode == "mute":
-             wf = wf.clone()
-             s = min(s_idx, wf.shape[-1])
-             wf[:, :s] = 0.0
+        s_idx = int(self.start_secs * sr)
+        e_idx = int(self.end_secs * sr) if self.end_secs is not None else wf.shape[-1]
+        e_idx = max(s_idx, min(e_idx, wf.shape[-1])) 
+
+        wf = wf[:, s_idx:e_idx] if e_idx > s_idx else torch.zeros((wf.shape[0], 1))
 
         if sr != self.target_sr:
             wf = ta.functional.resample(wf, sr, self.target_sr)
             sr = self.target_sr
-
-        if self.max_secs is not None:
-            max_len = int(self.max_secs * sr)
-            wf = wf[:, :max_len]
 
         item = {"waveform": wf, "sample_rate": sr, "path": str(path)}
 
