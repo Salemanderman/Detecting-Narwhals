@@ -1,0 +1,24 @@
+# Ignore everything
+*
+
+
+# Except these files (allowlist)
+!.gitignore
+!README.md
+
+!preprocessing
+!preprocessing/run_extraction_noref.py
+!preprocessing/show_npz_files.ipynb
+
+!utilities
+!utilities/configs.py
+!utilities/utils.py
+!utilities/feature_utils.py
+!utilities/plot_utils.py
+
+!analysis
+!analysis/finding_outliers.ipynb
+!analysis/pca_sliding_window.py
+!analysis/plot_spectrogram_windows.py
+
+!environment.yml
