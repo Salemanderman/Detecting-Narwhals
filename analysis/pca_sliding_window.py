@@ -24,7 +24,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-
+from sklearn.decomposition import PCA
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -78,7 +78,23 @@ def numpy_pca(X: np.ndarray, n_components: int):
 
     return X_pca, components, mean, evr[:k]
 
+def sklearn_pca(X: np.ndarray, n_components: int):
+    """
+    PCA using sklearn on X (N, D).
+    Returns:
+        X_pca:     (N, n_components) projected data
+        components:(n_components, D) principal axes (unit vectors)
+        mean:      (D,) column means used for centring
+        explained_variance_ratio: (n_components,)
+    """
+    pca = PCA(n_components=n_components)
+    X_pca = pca.fit_transform(X)
 
+    components = pca.components_  # (n_components, D)
+    mean = pca.mean_              # (D,)
+    evr = pca.explained_variance_ratio_  # (n_components,)
+
+    return X_pca, components, mean, evr
 
 
 # Main function:
