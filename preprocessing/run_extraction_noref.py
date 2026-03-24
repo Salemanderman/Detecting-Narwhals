@@ -59,6 +59,8 @@ def main():
     # Extract features and save to NPZ files and metadata
     index_rows = []
 
+    print("\n[info] Starting feature extraction...")
+
     with torch.no_grad():
         for i, batch in enumerate(loader, 1):
             waveforms = batch["waveforms"]
