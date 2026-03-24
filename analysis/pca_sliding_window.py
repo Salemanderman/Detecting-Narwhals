@@ -54,6 +54,13 @@ def window_feature(window: np.ndarray) -> np.ndarray:
     sig = window.std(axis=1)    # (n_mels,) vector of std across time frames
     return np.concatenate([mu, sig], axis=0) # (2*n_mels,) vector
 
+def window_feature_full(window: np.ndarray) -> np.ndarray:
+    """
+    Flatten the full window (n_mels, window_frames) into a single vector (n_mels * window_frames,).
+    This keeps all the information but results in a much higher dimensional feature space.
+    PCA can then find patterns across both frequency and time dimensions, but it may require more components to capture the same variance.
+    """
+    return window.flatten()  # (n_mels * window_frames,) vector
 
 def numpy_pca(X: np.ndarray, n_components: int):
     """
@@ -152,7 +159,7 @@ def main():
         n_windows = 0
         for start_frame, win in futils.windows_from_spectrogram(S, window_frames, stride_frames,
                                                           mel_start=mel_start, mel_end=mel_end):
-            feat = window_feature(win)
+            feat = window_feature_full(win)
             feature_rows.append(feat)
             window_meta.append({
                 "file": npz_path.name,

@@ -5,7 +5,7 @@ Preprocess raw .wav audio into .npz feature files and metadata
 ## Guide for preprocessing .wav files to .npz files
 ### 0) Navigate to your desired working directory and clone repository
 ```bash
-$ git clone https://github.com/Salemanderman/Detecting-Narwhals.git
+$ git clone https://github.com/Salemanderman/Detecting-Narwhals.git 
 ```
 ### 1) Put your input audio files in a folder
 
@@ -92,28 +92,11 @@ $ python analysis/pca_sliding_window.py \
         --mel-start 9 --mel-end 61 \
         --n-components 50
 ```
+For Windows:  
+```bash
+$ python analysis\pca_sliding_window.py --input-root processedDataNPZFiles --output-root analysis\pca_output --window-secs 5 --stride-secs 2.5 --mel-start 9 --mel-end 61 --n-components 50
+```
 If just a single file, add the --single-file and provide the filename
 
-This will produce a pca plot of the file(s) provided in the pca_sliding_window along with metadata
-
-## plot 5-second segments of a file
-
-Again stay or go to the directory Detecting-Narwhals and run the plot_spectrogram_window program
-
-```bash
-python analysis/plot_spectrogram_windows.py \
-        --input-root  processedDataNPZFiles \
-        --output-root analysis/spectrogram_windows_plot \
-        --window-secs 5 \
-        --stride-secs 2.5 \
-        --mel-start 9 --mel-end 61 \
-        --max-per-file 20 \
-        --cols 4
-```
-
-This will produce the 20 first windows of the npz file and plot them. 
-
-
-
-
+Now it produces 
 
