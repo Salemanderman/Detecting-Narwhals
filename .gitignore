@@ -5,6 +5,7 @@
 # Except these files (allowlist)
 !.gitignore
 !README.md
+!run_outlier_pipeline.py
 
 !preprocessing
 !preprocessing/run_extraction_noref.py

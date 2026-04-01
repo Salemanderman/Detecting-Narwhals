@@ -102,12 +102,14 @@ def main():
     ap.add_argument("--feature-key", default="feature", help="Key inside NPZ files (default: 'feature').")
     ap.add_argument("--single-file", default=None, help="Process only a specific file. Provide name of that file.")
     ap.add_argument("--no-plot", action="store_true", help="Skip saving plots.")
+    ap.add_argument("--pca-method", choices=["mean_std", "full_window"], default="mean_std", help="Feature type for PCA.")
     args = ap.parse_args()
 
     input_root = Path(args.input_root)
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
+    
     window_secs = args.window_secs
     stride_secs = args.stride_secs if args.stride_secs is not None else window_secs
     n_mels = args.n_mels
@@ -127,6 +129,7 @@ def main():
     print(f"Stride: {stride_secs:.2f} s, {stride_frames} frames")
     print(f"Mel bins: [{mel_start}, {mel_end})  ({mel_end - mel_start} bins)")
     print(f"n_components: {args.n_components}")
+    print(f"Using features for pca: {args.pca_method}")
 
     # Collect features from all windows from all files.
     npz_files = sorted(input_root.glob("*.npz"))
@@ -153,7 +156,10 @@ def main():
         n_windows = 0
         for start_frame, win in futils.windows_from_spectrogram(S, window_frames, stride_frames,
                                                           mel_start=mel_start, mel_end=mel_end):
-            feat = window_feature_full(win)
+            if args.pca_method == "mean_std":
+                feat = window_feature(win)
+            else:
+                feat = window_feature_full(win)
             feature_rows.append(feat)
             window_meta.append({
                 "file": npz_path.name,

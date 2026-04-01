@@ -279,6 +279,7 @@ def main():
     pca_output_root = Path(args.pca_root)
     npz_root = Path(args.npz_root)
     plot_output_root = Path(args.plots_root)
+    plot_output_root.mkdir(parents=True, exist_ok=True)
 
     print(f"PCA output: {pca_output_root}")
     print(f"Spectrogram root: {npz_root}")
@@ -331,19 +332,33 @@ def main():
     outlier_df = pd.DataFrame(outlier_info)
     if not outlier_df.empty:
         outlier_df = outlier_df.sort_values(["File", "Start Time (s)"], ascending=[True, True])
-        print("\nOutlier details:")
-        print(outlier_df.to_string())
 
         # Group outliers by source file
         outliers_by_file = outlier_df.groupby("File").size().sort_values(ascending=False)
-        print("\nOutliers per file:")
-        print(outliers_by_file.to_string())
 
     # Save CSV if requested
     if args.save_csv and not outlier_df.empty:
-        csv_path = pca_output_root / "outliers.csv"
+        csv_path = plot_output_root / "outliers.csv"
         outlier_df.to_csv(csv_path, index=False)
         print(f"\nSaved outlier table to: {csv_path}")
+
+        # Write summary report to text file
+        report_path = plot_output_root / "outliers_report.txt"
+        with open(report_path, "w") as f:
+            f.write("OUTLIER DETECTION REPORT\n\n\n")
+            f.write(f"Distance metric: {args.distance_metric}\n")
+            f.write(f"Threshold: {threshold:.3f} ({args.threshold_std} std deviations)\n")
+            f.write(f"Number of outliers: {len(outlier_indices)} out of {len(distances)} windows\n\n")
+            f.write(f"{args.distance_metric} distance stats:\n")
+            f.write(f"  Mean: {distances.mean():.3f}, Std: {distances.std():.3f}\n")
+            f.write(f"  Min: {distances.min():.3f}, Max: {distances.max():.3f}\n\n")
+            f.write("OUTLIERS PER FILE\n")
+            f.write("-" * 40 + "\n")
+            f.write(outliers_by_file.to_string() + "\n\n")
+            f.write("OUTLIER DETAILS\n")
+            f.write("-" * 40 + "\n")
+            f.write(outlier_df.to_string() + "\n")
+        print(f"Saved report to: {report_path}")
 
     # Plotting
     if not args.no_plot:
