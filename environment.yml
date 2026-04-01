@@ -11,4 +11,5 @@ dependencies:
   - ipykernel
   - libsndfile
   - ffmpeg
+  - scipy
   # remove sox on Windows unless you specifically need CLI sox

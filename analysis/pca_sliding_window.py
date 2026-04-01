@@ -23,9 +23,7 @@ Or for a single file:
 """
 
 import argparse
-import json
 import sys
-from datetime import datetime
 from pathlib import Path
 import numpy as np
 
@@ -118,9 +116,7 @@ def main():
 
     # Derive time-frame counts from spectrogram config.
     spec_config = configs.get_specgram_config()
-    hop_length = spec_config["hop_length"]      # 512 samples
-    audio_sr = spec_config["sample_rate"]     # 64 000 Hz
-    secs_per_frame = hop_length / audio_sr    # 
+    secs_per_frame = spec_config["hop_length"] / spec_config["sample_rate"]    
 
     window_frames = max(1, round(window_secs / secs_per_frame))
     stride_frames = max(1, round(stride_secs / secs_per_frame))
@@ -133,15 +129,13 @@ def main():
     print(f"n_components: {args.n_components}")
 
     # Collect features from all windows from all files.
-    npz_files = sorted(input_root.rglob("*.npz"))
-    # Skip combined array files that don't hold single-recording spectrograms.
-    npz_files = [p for p in npz_files if args.feature_key in np.load(p, allow_pickle=True).files]
+    npz_files = sorted(input_root.glob("*.npz"))
 
     if args.single_file:
         npz_files = [p for p in npz_files if p.name == args.single_file] # only when single file is specified
 
     if not npz_files:
-        print(f"ERROR, No NPZ files with key '{args.feature_key}' found under {input_root}")
+        print(f"ERROR, No NPZ files found under {input_root}")
         sys.exit(1)
 
     print(f"\nFiles found: {len(npz_files)}")
@@ -188,46 +182,34 @@ def main():
           f"PC1={evr[0]*100:.1f}% "
           f"PC2={evr[1]*100:.1f}% ")
 
-    # Save PCA results and metadata
+    # Save PCA results with all metadata in one file
     out_npz = output_root / "pca_results.npz"
-    np.savez_compressed(
-        out_npz,
-        X_pca = X_pca,
-        components = components,
-        pca_mean = pca_mean,
-        evr = evr,
-        X_raw = X,
-    )
 
-    meta = {
-        "created": datetime.now().isoformat(),
-        "input_root": str(input_root),
-        "window_secs": window_secs,
-        "stride_secs": stride_secs,
-        "window_frames": window_frames,
-        "stride_frames": stride_frames,
-        "mel_start": mel_start,
-        "mel_end": mel_end,
-        "n_mels": n_mels,
-        "n_components": int(n_components),
-        "n_windows": int(X.shape[0]),
-        "feature_dim": int(X.shape[1]),
-        "files": [p.name for p in npz_files],
-    }
-    
-    with open(output_root / "pca_meta.json", "w") as f:
-        json.dump(meta, f, indent=2)
-
-    # Save window metadata (file + time offset per row).
-    meta_npz = output_root / "window_index.npz"
+    # Extract window metadata arrays
     files_arr = np.array([window["file"] for window in window_meta], dtype=object)
     starts_arr = np.array([window["start_frame"] for window in window_meta], dtype=np.int64)
     secs_arr = np.array([window["start_sec"] for window in window_meta], dtype=np.float32)
-    np.savez_compressed(meta_npz, files=files_arr, start_frames=starts_arr, start_secs=secs_arr)
+
+    np.savez_compressed(
+        out_npz,
+        # PCA results
+        X_pca=X_pca,
+        components=components,
+        pca_mean=pca_mean,
+        evr=evr,
+        # Window metadata (aligned with X_pca rows)
+        window_files=files_arr,
+        window_start_frames=starts_arr,
+        window_start_secs=secs_arr,
+        # Config parameters
+        window_secs=window_secs,
+        stride_secs=stride_secs,
+        mel_start=mel_start,
+        mel_end=mel_end,
+        n_components=int(n_components),
+    )
 
     print(f"\nSaved to {out_npz}")
-    print(f"Saved to {meta_npz}")
-    print(f"Saved to {output_root / 'pca_meta.json'}")
 
     # Save plots of pca
 

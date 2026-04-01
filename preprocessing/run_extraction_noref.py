@@ -1,6 +1,7 @@
 import argparse
 import csv
 import numpy as np
+from pprint import pformat
 from pathlib import Path
 import sys
 import torch
@@ -34,7 +35,9 @@ def main():
     subset_len = args.subset_len
 
     start_secs  = 5 # Skip first 5 seconds of each recording due to corruption.
+    print(f" [info] cutting off first {start_secs} seconds of each recording.")
     end_secs = 265 # Cut off endings so each file is same length
+    print(f" [info] cutting off last {270 - end_secs} seconds of each recording.")
     batch_size = 32
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -54,7 +57,7 @@ def main():
     specgram_config = configs.get_specgram_config()
     logmel_transf   = utils.PipelineSpecgram(specgram_config=specgram_config).to(device)
     logmel_transf.eval()
-    print(f"Specgram config: {specgram_config}")
+    print("Specgram config:\n" + pformat(specgram_config, indent=2, sort_dicts=False))
 
     # Extract features and save to NPZ files and metadata
     index_rows = []
@@ -102,9 +105,10 @@ def main():
 
                 except Exception as e:
                     print(f"[error] {wav_path}: {e}", file=sys.stderr)
-
-            if i % 10 == 0:
-                print(f"[info] Processed {i * batch_size} / {len(dataset)} files.")
+                    
+            processed_files = min(i * batch_size, len(dataset))
+            if (i * batch_size) > (10 * i):
+                print(f"[info] Processed {processed_files} / {len(dataset)} files.")
 
     print(f"[done] Extracted features for {len(index_rows)} files.")
 
