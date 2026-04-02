@@ -6,6 +6,7 @@
 !.gitignore
 !README.md
 !run_outlier_pipeline.py
+!pipeline_config.py
 
 !preprocessing
 !preprocessing/run_extraction_noref.py

@@ -7,6 +7,10 @@ This script runs the complete outlier detection pipeline:
 3. Find and visualize outliers
 
 Example usage:
+    # Run with default config (from pipeline_config.py):
+    python run_outlier_pipeline.py
+
+    # Override specific parameters:
     python run_outlier_pipeline.py \
         --audio-root data/subsetWithValidatedCalls \
         --output-root output/pipeline_results \
@@ -15,13 +19,11 @@ Example usage:
         --n-components 20 \
         --pca-method mean_std \
         --distance-metric mahalanobis \
-        --threshold-std 3 
+        --threshold-std 3
 
 
 To skip steps that have already been run:
     python run_outlier_pipeline.py \
-        --audio-root data/subsetWithValidatedCalls \
-        --output-root output/pipeline_results \
         --skip-extraction \
         --skip-pca \
         --threshold-std 3
@@ -32,36 +34,50 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    import pipeline_config as config
+except ImportError:
+    config = None
+
 
 def main():
+    if config:
+        cfg = config.get_pipeline_config()
+    else:
+        cfg = {
+            'audio_root': None,
+            'output_root': None,
+            'window_secs': 5.0,
+            'stride_secs': None,
+            'mel_start': None,
+            'mel_end': None,
+            'n_components': 10,
+            'pca_method': 'mean_std',
+            'distance_metric': 'mahalanobis',
+            'threshold_std': 3.0,
+            'skip_extraction': False,
+            'skip_pca': False,
+            'no_plot': False,
+            'no_audio_clips': False,
+            'subset_len': 0,
+        }
+
     ap = argparse.ArgumentParser(description="Run full outlier detection pipeline: extraction -> PCA -> outliers")
-
-    # Input/output paths
-    ap.add_argument("--audio-root", required=True, help="Directory containing raw .wav audio files.")
-    ap.add_argument("--output-root", required=True, help="Base output directory for all pipeline results.")
-
-    # Shared parameters
-    ap.add_argument("--window-secs", type=float, default=5.0, help="Window length in seconds (default: 5.0).")
-    ap.add_argument("--stride-secs", type=float, default=None, help="Stride between windows in seconds (default: non-overlapping).")
-    ap.add_argument("--mel-start", type=int, default=None, help="First mel bin to include (default: 0).")
-    ap.add_argument("--mel-end", type=int, default=None, help="Last mel bin exclusive (default: all).")
-
-    # PCA parameters
-    ap.add_argument("--n-components", type=int, default=10, help="Number of PCA components (default: 10).")
-    ap.add_argument("--pca-method", choices=["mean_std", "full_window"], default="mean_std", help="Feature type for PCA (default: mean_std).")
-
-    # Outlier detection parameters
-    ap.add_argument("--distance-metric", choices=["euclidean", "mahalanobis"], default="mahalanobis", help="Distance metric for outlier detection (default: mahalanobis).")
-    ap.add_argument("--threshold-std", type=float, default=3.0, help="Number of std deviations for outlier threshold (default: 3.0).")
-
-    # Skip flags
-    ap.add_argument("--skip-extraction", action="store_true", help="Skip spectrogram extraction (use existing .npz files).")
-    ap.add_argument("--skip-pca", action="store_true", help="Skip PCA (use existing pca_results.npz).")
-    ap.add_argument("--no-plot", action="store_true", help="Skip plotting in all steps.")
-    ap.add_argument("--no-audio-clips", action="store_true", help="Skip saving audio clips for outliers.")
-
-    # Subset flag
-    ap.add_argument("--subset-len", type=int, default=0, help="Limit to first N audio files (for testing).")
+    ap.add_argument("--audio-root", default=cfg['audio_root'], required=config is None, help="Directory containing raw .wav audio files.")
+    ap.add_argument("--output-root", default=cfg['output_root'], required=config is None, help="Base output directory for all pipeline results.")
+    ap.add_argument("--window-secs", type=float, default=cfg['window_secs'], help=f"Window length in seconds (default: {cfg['window_secs']}).")
+    ap.add_argument("--stride-secs", type=float, default=cfg['stride_secs'], help="Stride between windows in seconds (default: non-overlapping).")
+    ap.add_argument("--mel-start", type=int, default=cfg['mel_start'], help=f"First mel bin to include (default: {cfg['mel_start'] or 0}).")
+    ap.add_argument("--mel-end", type=int, default=cfg['mel_end'], help=f"Last mel bin exclusive (default: {cfg['mel_end'] or 'all'}).")
+    ap.add_argument("--n-components", type=int, default=cfg['n_components'], help=f"Number of PCA components (default: {cfg['n_components']}).")
+    ap.add_argument("--pca-method", choices=["mean_std", "full_window"], default=cfg['pca_method'], help=f"Feature type for PCA (default: {cfg['pca_method']}).")
+    ap.add_argument("--distance-metric", choices=["euclidean", "mahalanobis"], default=cfg['distance_metric'], help=f"Distance metric for outlier detection (default: {cfg['distance_metric']}).")
+    ap.add_argument("--threshold-std", type=float, default=cfg['threshold_std'], help=f"Number of std deviations for outlier threshold (default: {cfg['threshold_std']}).")
+    ap.add_argument("--skip-extraction", action="store_true", default=cfg['skip_extraction'], help="Skip spectrogram extraction (use existing .npz files).")
+    ap.add_argument("--skip-pca", action="store_true", default=cfg['skip_pca'], help="Skip PCA (use existing pca_results.npz).")
+    ap.add_argument("--no-plot", action="store_true", default=cfg['no_plot'], help="Skip plotting in all steps.")
+    ap.add_argument("--no-audio-clips", action="store_true", default=cfg['no_audio_clips'], help="Skip saving audio clips for outliers.")
+    ap.add_argument("--subset-len", type=int, default=cfg['subset_len'], help=f"Limit to first N audio files (for testing) (default: {cfg['subset_len']}).")
 
     args = ap.parse_args()
 
