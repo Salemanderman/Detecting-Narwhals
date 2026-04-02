@@ -121,8 +121,10 @@ python analysis/finding_outliers.py \
 
 ## Running the full pipeline for outlier detection with pca with Standard Config
 
-The `run_outlier_pipeline.py` file runs the complete outlier detection pipeline: 
-  extraction from .wav to .npz files → PCA → find outliers 
+The `run_outlier_pipeline.py` file runs the complete outlier detection pipeline:   
+1. extraction from .wav to .npz files → 
+2. PCA → 
+3. find outliers in pca
 
 
 ### Setup

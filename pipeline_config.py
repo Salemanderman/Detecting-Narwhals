@@ -14,8 +14,8 @@ def get_pipeline_config():
     """
     config = dict(
         # Input/output paths
-        audio_root="data/subsetWithValidatedCalls",
-        output_root="output/pipeline_results",
+        audio_root=str(Path("data") / "subsetWithValidatedCalls"), # should work with any operating system
+        output_root=str(Path("output") / "pipeline_results"),  # should work with any operating system
 
         # Shared parameters
         window_secs=5.0,
