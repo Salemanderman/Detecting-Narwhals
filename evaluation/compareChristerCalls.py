@@ -63,6 +63,8 @@ def main():
     total = len(validation_df)
     n_matched = len(matched)
     recall = n_matched / total if total > 0 else 0
+    precision = n_matched / len(outliers_df) if len(outliers_df) > 0 else 0
+    f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
 
 
     print("Results;")
@@ -74,6 +76,8 @@ def main():
         f"n matched as outliers:  {n_matched}",
         f"n missed:               {len(unmatched)}",
         f"Recall:                 {recall:.1%}",
+        f"Precision:              {precision:.1%}",
+        f"F1 Score:              {f1_score:.1%}",
         "",
         "List of matched:",
     ]
