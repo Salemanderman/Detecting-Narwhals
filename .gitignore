@@ -21,5 +21,6 @@
 !analysis
 !analysis/finding_outliers.py
 !analysis/pca_sliding_window.py
+!analysis/plot_spectrogram_windows.py
 
 !environment.yml
