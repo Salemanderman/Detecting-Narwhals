@@ -23,4 +23,8 @@
 !analysis/pca_sliding_window.py
 !analysis/plot_spectrogram_windows.py
 
+!evaluation
+!evaluation/validatedChristerCalls.csv
+!evaluation/compareChristerCalls.py
+
 !environment.yml
