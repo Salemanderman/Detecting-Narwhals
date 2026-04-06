@@ -43,7 +43,7 @@ $ conda activate narwhal_env
 
 Use preprocessing/run_extraction_noref.py with required arguments:
 
-- --input-root: folder with .wav files  
+- --audio-root: folder with .wav files  
 - --output-root: destination for generated .npz + metadata  
 - --subset-len (optional): process only first N files
 
@@ -51,7 +51,7 @@ Example (first 20 files on a macbook):
 
 ```bash
 $ python preprocessing/run_extraction_noref.py \
-  --input-root datadictionary \
+  --audio-root datadictionary \
   --output-root processedDataNPZFiles \
   --subset-len 20
 ```
@@ -85,7 +85,7 @@ $ cd PATH/TO/Detecting-Narwhals
 Then run the pca:  
 ```bash
 $ python analysis/pca_sliding_window.py \
-        --input-root  processedDataNPZFiles \
+        --npz-root  processedDataNPZFiles \
         --output-root analysis/pca_output \
         --window-secs 5 \
         --stride-secs 2.5 \
@@ -94,7 +94,7 @@ $ python analysis/pca_sliding_window.py \
 ```
 For Windows:  
 ```bash
-$ python analysis\pca_sliding_window.py --input-root processedDataNPZFiles --output-root analysis\pca_output --window-secs 5 --stride-secs 2.5 --mel-start 9 --mel-end 61 --n-components 50
+$ python analysis\pca_sliding_window.py --npz-root processedDataNPZFiles --output-root analysis\pca_output --window-secs 5 --stride-secs 2.5 --mel-start 9 --mel-end 61 --n-components 50
 ```
 If just a single file, add the --single-file and provide the filename
 
@@ -147,7 +147,7 @@ When `pipeline_config.py` is set up with desired defaults, run by executing:
 $ python run_outlier_pipeline.py
 ```
 
-This will use all the default values from `pipeline_config.py`.
+This will use all the default values from `utilities/configs.py`.
 
 ### Overriding Specific Parameters
 

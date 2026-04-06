@@ -4,7 +4,7 @@ Computes PCA with n_components components and saves the results.
 NB: Only plots the 2 most significant components, even though there are more.
 Use for example:
     python analysis/pca_sliding_window.py \
-        --input-root  inputDataDictionary/Aug_6229 \
+        --npz-root  inputDataDictionary/Aug_6229 \
         --output-root analysis/pca_output \
         --window-secs 5 \
         --stride-secs 2.5 \
@@ -13,7 +13,7 @@ Use for example:
 
 Or for a single file:
     python analysis/pca_sliding_window.py \
-        --input-root  inputDataDictionary/Aug_6229 \
+        --npz-root  inputDataDictionary/Aug_6229 \
         --output-root analysis/pca_output \
         --single-file 6229.220828162000.npz \
         --window-secs 5 \
@@ -91,57 +91,71 @@ def numpy_pca(X: np.ndarray, n_components: int):
 # Main function:
 def main():
     ap = argparse.ArgumentParser(description="Sliding-window PCA over NPZ log-mel files.")
-    ap.add_argument("--input-root", required=True, help="Directory containing .npz feature files.")
+    ap.add_argument("--npz-root", required=True, help="Directory containing .npz feature files.")
     ap.add_argument("--output-root", required=True, help="Where to write PCA results.")
     ap.add_argument("--window-secs", type=float, default=5.0, help="Window length in seconds (default: 5).")
     ap.add_argument("--stride-secs", type=float, default=None, help="Stride between consecutive windows in seconds. (Default: non-overlapping).")
     ap.add_argument("--mel-start", type=int,   default=0, help="First mel bin to include (default: 0).")
-    ap.add_argument("--mel-end", type=int, default=128,  help="Last mel bin to include. If 61 then 60 is the last (default: 128).")
+    ap.add_argument("--mel-end", type=int, default=None,  help="Last mel bin to include (exclusive). If not provided, uses all bins (default: all).")
     ap.add_argument("--n-components", type=int, default=50, help="Number of PCA components to keep.")
-    ap.add_argument("--n-mels", type=int, default=128, help="Total mel bins in the NPZ files (default: 128).")
+    ap.add_argument("--n-mels", type=int, default=None, help="Total mel bins in the NPZ files (default: auto-detect from first file).")
     ap.add_argument("--feature-key", default="feature", help="Key inside NPZ files (default: 'feature').")
     ap.add_argument("--single-file", default=None, help="Process only a specific file. Provide name of that file.")
     ap.add_argument("--no-plot", action="store_true", help="Skip saving plots.")
     ap.add_argument("--pca-method", choices=["mean_std", "full_window"], default="mean_std", help="Feature type for PCA.")
     args = ap.parse_args()
 
-    input_root = Path(args.input_root)
+    npz_root = Path(args.npz_root)
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
-    
+
     window_secs = args.window_secs
     stride_secs = args.stride_secs if args.stride_secs is not None else window_secs
-    n_mels = args.n_mels
     mel_start = args.mel_start
     mel_end = args.mel_end
 
     # Derive time-frame counts from spectrogram config.
     spec_config = configs.get_specgram_config()
-    secs_per_frame = spec_config["hop_length"] / spec_config["sample_rate"]    
+    secs_per_frame = spec_config["hop_length"] / spec_config["sample_rate"]
 
     window_frames = max(1, round(window_secs / secs_per_frame))
     stride_frames = max(1, round(stride_secs / secs_per_frame))
 
-    print(f"Input root: {input_root}")
-    print(f"Output root: {output_root}")
-    print(f"Window: {window_secs:.2f} s, {window_frames} frames")
-    print(f"Stride: {stride_secs:.2f} s, {stride_frames} frames")
-    print(f"Mel bins: [{mel_start}, {mel_end})  ({mel_end - mel_start} bins)")
-    print(f"n_components: {args.n_components}")
-    print(f"Using features for pca: {args.pca_method}")
-
     # Collect features from all windows from all files.
-    npz_files = sorted(input_root.glob("*.npz"))
+    npz_files = sorted(npz_root.glob("*.npz"))
 
     if args.single_file:
         npz_files = [p for p in npz_files if p.name == args.single_file] # only when single file is specified
 
     if not npz_files:
-        print(f"ERROR, No NPZ files found under {input_root}")
+        print(f"ERROR, No NPZ files found under {npz_root}")
         sys.exit(1)
 
+    print(f"NPZ root: {npz_root}")
+    print(f"Output root: {output_root}")
+    print(f"Window: {window_secs:.2f} s, {window_frames} frames")
+    print(f"Stride: {stride_secs:.2f} s, {stride_frames} frames")
+    print(f"n_components: {args.n_components}")
+    print(f"Using features for pca: {args.pca_method}")
     print(f"\nFiles found: {len(npz_files)}")
+
+    # Auto-detect n_mels from first file if not specified
+    n_mels = args.n_mels
+    if n_mels is None:
+        try:
+            S, _ = futils.load_spectrogram(npz_files[0], n_mels=None, key=args.feature_key)
+            n_mels = S.shape[0]
+            print(f"Auto-detected {n_mels} frequency bins from first file")
+        except Exception as e:
+            print(f"ERROR: Could not auto-detect n_mels from {npz_files[0]}: {e}")
+            sys.exit(1)
+
+    # Set mel_end to all bins if not specified
+    if mel_end is None:
+        mel_end = n_mels
+
+    print(f"Frequency bins: [{mel_start}, {mel_end}) ({mel_end - mel_start} bins)")
 
     feature_rows = []  # each row: (2*(mel_end-mel_start),) vector
     window_meta  = []  # (filename, start_frame, start_sec) per window

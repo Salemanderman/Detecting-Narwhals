@@ -132,6 +132,7 @@ class PipelineSpecgram(torch.nn.Module):
         x = self.resample(waveform) # Skips resampling if Identity was called.
         spec = self.spec(x) # Applies the power spectrogram settings to each input waveform.
         # Returns shape [C, F, T] for channels, freq bins and time frames.
+        print(f"Computed spectrogram with shape {spec.shape} and effective sample rate {self.effective_sr} Hz")
 
         # p_ref is in Pa^2. Divide by micro-Pascals squared to get reference level.
         spec_ref = spec / (1e-6**2)
@@ -140,8 +141,10 @@ class PipelineSpecgram(torch.nn.Module):
             mel = self.mel_scale(spec_ref)
             # Returns shape [C, M, T] for channels, mel bins and time frames. 
             mel_db = self.to_db(mel) # AmplitudeToDB(stype='power') produces log-mel dB. 
+            print(f"Applied Mel scale with {self.mel_bins} bins, resulting in shape {mel_db.shape}")
             return mel_db
         else: 
+            print(f"using frequency bins without Mel scaling, resulting in shape {spec_ref.shape}")
             spec_db = self.to_db(spec_ref)
             return spec_db
 

@@ -24,12 +24,12 @@ def _to_int(x):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input-root",  required=True, help="Root folder containing audio files.")
+    ap.add_argument("--audio-root",  required=True, help="Root folder containing audio files.")
     ap.add_argument("--output-root", required=True, help="Output folder for .npz features and index.")
     ap.add_argument("--subset-len", type=int, default=0, help="Optionally limit to a subset of data.")
     args = ap.parse_args()
 
-    input_root  = Path(args.input_root)
+    audio_root  = Path(args.audio_root)
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     subset_len = args.subset_len
@@ -41,12 +41,12 @@ def main():
     batch_size = 32
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Input:  {input_root}")
+    print(f"Input:  {audio_root}")
     print(f"Output: {output_root}")
     print(f"Device: {device}")
 
     # Setup dataset and dataloader
-    dataset = utils.AudioDataset(input_root, target_sr=64_000, start_secs=start_secs, end_secs=end_secs)
+    dataset = utils.AudioDataset(audio_root, target_sr=64_000, start_secs=start_secs, end_secs=end_secs)
     if subset_len > 0:
         dataset = Subset(dataset, list(range(min(subset_len, len(dataset))))) # takes first N samples
     loader  = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=utils.max_len_collate) # Only shuffle data when training.
@@ -83,9 +83,10 @@ def main():
 
                     # Mirror input folder structure under output_root.
                     try:
-                        out_dir = output_root / wav_path.relative_to(input_root).parent
+                        out_dir = output_root / wav_path.parent.relative_to(audio_root)
                     except ValueError:
                         out_dir = output_root
+
                     out_dir.mkdir(parents=True, exist_ok=True)
 
                     out_path = out_dir / (wav_path.stem + ".npz")

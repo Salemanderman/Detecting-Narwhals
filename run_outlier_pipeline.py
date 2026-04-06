@@ -34,8 +34,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
 try:
-    import pipeline_config as config
+    import utilities.configs as config
 except ImportError:
     config = None
 
@@ -46,11 +48,13 @@ def main():
     else:
         cfg = {
             'audio_root': None,
+            'npz_root': None,
             'output_root': None,
             'window_secs': 5.0,
             'stride_secs': None,
             'mel_start': None,
             'mel_end': None,
+            'n_mels': None,
             'n_components': 10,
             'pca_method': 'mean_std',
             'distance_metric': 'mahalanobis',
@@ -64,11 +68,13 @@ def main():
 
     ap = argparse.ArgumentParser(description="Run full outlier detection pipeline: extraction -> PCA -> outliers")
     ap.add_argument("--audio-root", default=cfg['audio_root'], required=config is None, help="Directory containing raw .wav audio files.")
+    ap.add_argument("--npz-root", default=cfg['npz_root'], required=config is None, help="Directory for storing .npz files.")
     ap.add_argument("--output-root", default=cfg['output_root'], required=config is None, help="Base output directory for all pipeline results.")
     ap.add_argument("--window-secs", type=float, default=cfg['window_secs'], help=f"Window length in seconds (default: {cfg['window_secs']}).")
     ap.add_argument("--stride-secs", type=float, default=cfg['stride_secs'], help="Stride between windows in seconds (default: non-overlapping).")
     ap.add_argument("--mel-start", type=int, default=cfg['mel_start'], help=f"First mel bin to include (default: {cfg['mel_start'] or 0}).")
     ap.add_argument("--mel-end", type=int, default=cfg['mel_end'], help=f"Last mel bin exclusive (default: {cfg['mel_end'] or 'all'}).")
+    ap.add_argument("--n-mels", type=int, default=cfg['n_mels'], help=f"Number of mel bins in spectrograms (default: {cfg['n_mels'] or 'auto-detect'}).")
     ap.add_argument("--n-components", type=int, default=cfg['n_components'], help=f"Number of PCA components (default: {cfg['n_components']}).")
     ap.add_argument("--pca-method", choices=["mean_std", "full_window"], default=cfg['pca_method'], help=f"Feature type for PCA (default: {cfg['pca_method']}).")
     ap.add_argument("--distance-metric", choices=["euclidean", "mahalanobis"], default=cfg['distance_metric'], help=f"Distance metric for outlier detection (default: {cfg['distance_metric']}).")
@@ -83,12 +89,19 @@ def main():
 
     # Setup paths
     audio_root = Path(args.audio_root)
+    if not audio_root.exists():
+        raise FileNotFoundError(f"Audio root directory not found: {audio_root}")
+    
     output_root = Path(args.output_root)
-    npz_root = output_root / "npz"
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    npz_root = Path(args.npz_root) if args.npz_root else output_root / "npz"
+    npz_root.mkdir(parents=True, exist_ok=True)
+
     pca_root = output_root / "pca"
     outliers_root = output_root / "outliers"
 
-    output_root.mkdir(parents=True, exist_ok=True)
+    
 
     print(f"Pipeline Configuration:")
     print(f"  Audio root:   {audio_root}")
@@ -102,7 +115,7 @@ def main():
     if not args.skip_extraction:
         cmd = [
             sys.executable, "preprocessing/run_extraction_noref.py",
-            "--input-root", str(audio_root),
+            "--audio-root", str(audio_root),
             "--output-root", str(npz_root),
         ]
         if args.subset_len > 0:
@@ -127,7 +140,7 @@ def main():
     if not args.skip_pca:
         cmd = [
             sys.executable, "analysis/pca_sliding_window.py",
-            "--input-root", str(npz_root),
+            "--npz-root", str(npz_root),
             "--output-root", str(pca_root),
             "--window-secs", str(args.window_secs),
             "--n-components", str(args.n_components),
@@ -135,6 +148,8 @@ def main():
         ]
         if args.stride_secs is not None:
             cmd.extend(["--stride-secs", str(args.stride_secs)])
+        if args.n_mels is not None:
+            cmd.extend(["--n-mels", str(args.n_mels)])
         if args.mel_start is not None:
             cmd.extend(["--mel-start", str(args.mel_start)])
         if args.mel_end is not None:

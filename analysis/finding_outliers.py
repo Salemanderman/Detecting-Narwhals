@@ -373,16 +373,22 @@ def main():
         if outlier_df.empty:
             print("\nNo outliers found, skipping spectrogram plotting.")
         else:
-            spec_dir = plot_output_root / "outlier_spectrograms"
-            spec_dir.mkdir(parents=True, exist_ok=True)
+            outliers_root = plot_output_root / "outliers"
+            outliers_root.mkdir(parents=True, exist_ok=True)
 
             # Group outliers by source file and save one grid plot per file
             grouped = outlier_df.groupby("File")
-            print(f"\nSaving outlier grids for {len(grouped)} files to {spec_dir}")
+            print(f"\nSaving outlier grids for {len(grouped)} files to {outliers_root}")
 
             for filename, file_outliers in grouped:
                 file_stem = Path(filename).stem
-                save_path = spec_dir / f"{file_stem}.png"
+
+                # Create directory for this file
+                file_dir = outliers_root / file_stem
+                file_dir.mkdir(parents=True, exist_ok=True)
+
+                # Save grid plot in the file's directory
+                save_path = file_dir / f"{file_stem}_grid.png"
                 try:
                     save_file_outliers_grid(
                         filename, file_outliers, npz_root, window_frames, spec_cfg,
@@ -396,31 +402,42 @@ def main():
     # Save audio clips if audio_root is provided
     if args.audio_root and not outlier_df.empty:
         audio_root = Path(args.audio_root)
-        audio_dir = plot_output_root / "audio_clips"
-        audio_dir.mkdir(parents=True, exist_ok=True)
+        outliers_root = plot_output_root / "outliers"
+        outliers_root.mkdir(parents=True, exist_ok=True)
 
-        print(f"\nSaving {len(outlier_df)} audio clips to {audio_dir}")
-        for i, (_, row) in enumerate(outlier_df.iterrows()):
+        # Group outliers by source file
+        grouped = outlier_df.groupby("File")
+        print(f"\nSaving audio clips for {len(grouped)} files to {outliers_root}")
+
+        total_saved = 0
+        for filename, file_outliers in grouped:
+            file_stem = Path(filename).stem
+
+            # Create directory for this file (will already exist if plots were made)
+            file_dir = outliers_root / file_stem
+            file_dir.mkdir(parents=True, exist_ok=True)
+
             # Convert .npz filename to .wav
-            npz_filename = row["File"]
-            wav_filename = Path(npz_filename).stem + ".wav"
+            wav_filename = Path(filename).stem + ".wav"
             audio_path = audio_root / wav_filename
 
             if not audio_path.exists():
                 print(f"  Warning: Audio file not found: {audio_path}")
                 continue
 
-            start_sec = row["Start Time (s)"]
-            file_stem = Path(npz_filename).stem
-            clip_filename = f"{file_stem}_t{start_sec:.2f}s.wav"
-            save_path = audio_dir / clip_filename
+            # Save audio clip for each outlier from this file
+            for _, row in file_outliers.iterrows():
+                start_sec = row["Start Time (s)"]
+                clip_filename = f"{file_stem}_t{start_sec:.2f}s.wav"
+                save_path = file_dir / clip_filename
 
-            try:
-                save_audio_clip(audio_path, start_sec, args.window_secs, save_path)
-            except Exception as e:
-                print(f"  Error saving {clip_filename}: {e}")
+                try:
+                    save_audio_clip(audio_path, start_sec, args.window_secs, save_path)
+                    total_saved += 1
+                except Exception as e:
+                    print(f"  Error saving {clip_filename}: {e}")
 
-        print(f"  Saved audio clips")
+        print(f"  Saved {total_saved} audio clips")
 
     print("\nDone.")
 

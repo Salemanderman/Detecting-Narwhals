@@ -4,6 +4,12 @@ from pathlib import Path
 import torch
 import torchaudio as ta
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import utilities.feature_utils as futils
+import utilities.configs as configs
+
 # # Plots the pure waveform vector.
 # def plot_waveform(waveform, sample_rate):
 #     """Plots the raw waveform (mono channel)."""

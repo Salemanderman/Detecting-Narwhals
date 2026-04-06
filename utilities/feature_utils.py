@@ -173,6 +173,10 @@ def load_spectrogram(npz_path: Path, n_mels: int = 128, key: str = "feature"):
     if spectrogram.ndim != 2:
         raise ValueError(f"{npz_path}: expected 2-D array after squeeze, got {spectrogram.shape}")
 
+    # Auto-detect n_mels if not provided
+    if n_mels is None:
+        n_mels = spectrogram.shape[0]
+
     # Ensure shape is (n_mels, T).
     if spectrogram.shape[0] == n_mels:
         pass
