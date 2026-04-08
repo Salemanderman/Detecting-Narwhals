@@ -7,7 +7,7 @@ log-mel spectrogram image.  One grid PNG is saved per input file.
 
 Example usage:
     python analysis/plot_spectrogram_windows.py \
-        --input-root  testRunExtractionNoref/Aug_6229 \
+        --npz-root  testRunExtractionNoref/Aug_6229 \
         --output-root analysis/spectrogram_windows \
         --window-secs 5 \
         --stride-secs 5 \
@@ -17,7 +17,7 @@ Example usage:
 
 Or for a single file:
     python analysis/plot_spectrogram_windows.py \
-        --input-root  testRunExtractionNoref/Aug_6229 \
+        --npz-root  testRunExtractionNoref/Aug_6229 \
         --output-root analysis/spectrogram_windows \
         --single-file recording_123.npz \
         --window-secs 5 \
@@ -102,7 +102,7 @@ def plot_window_grid(
 
 def main():
     ap = argparse.ArgumentParser(description="Sliding-window spectrogram plots from NPZ files.")
-    ap.add_argument("--input-root",   required=True, help="Directory tree containing .npz feature files.")
+    ap.add_argument("--npz-root",   required=True, help="Directory tree containing .npz feature files.")
     ap.add_argument("--output-root",  required=True, help="Where to write plot images.")
     ap.add_argument("--window-secs",  type=float, default=5.0,  help="Window length in seconds (default: 5).")
     ap.add_argument("--stride-secs",  type=float, default=None,
@@ -116,7 +116,7 @@ def main():
     ap.add_argument("--cmap",         default="viridis",         help="Matplotlib colormap (default: inferno).")
     args = ap.parse_args()
 
-    input_root  = Path(args.input_root)
+    npz_root  = Path(args.npz_root)
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
@@ -135,7 +135,7 @@ def main():
     window_frames = max(1, round(window_secs / secs_per_frame))
     stride_frames = max(1, round(stride_secs / secs_per_frame))
 
-    print(f"Input root:    {input_root}")
+    print(f"NPZ root:    {npz_root}")
     print(f"Output root:   {output_root}")
     print(f"Window:        {window_secs:.2f} s  ->  {window_frames} frames")
     print(f"Stride:        {stride_secs:.2f} s  ->  {stride_frames} frames")
@@ -143,14 +143,14 @@ def main():
     print(f"Grid columns:  {args.cols}")
 
     # Load all NPZ files
-    npz_files = sorted(input_root.rglob("*.npz"))
+    npz_files = sorted(npz_root.rglob("*.npz"))
     npz_files = [p for p in npz_files if args.feature_key in np.load(p, allow_pickle=True).files]
 
     if args.single_file:
         npz_files = [p for p in npz_files if p.name == args.single_file]
 
     if not npz_files:
-        print(f"[error] No NPZ files with key '{args.feature_key}' found under {input_root}")
+        print(f"[error] No NPZ files with key '{args.feature_key}' found under {npz_root}")
         sys.exit(1)
 
     print(f"\nFiles found: {len(npz_files)}")
