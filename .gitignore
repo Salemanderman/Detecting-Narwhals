@@ -27,4 +27,7 @@
 !evaluation/validatedChristerCalls.csv
 !evaluation/compareChristerCalls.py
 
+!hyperparameter_tuning
+!hyperparameter_tuning/hyperparameter_tuning.py
+
 !environment.yml
