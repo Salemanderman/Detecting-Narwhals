@@ -3,13 +3,13 @@ from pathlib import Path
 
 # Configurations for mel-spectrogram feature generation shared
 # across the project.
-def get_specgram_config(n_fft=None):
+def get_specgram_config():
 
     configs = dict(
         sample_rate=64_000,
-        n_fft=n_fft,
-        win_length=2014,
-        hop_length=512,
+        n_fft=512,
+        win_length=512,
+        hop_length=256,
         window_fn=torch.hann_window,
         resample_rate=None,
         n_mels=None, # n_mels=128, # From 256.
