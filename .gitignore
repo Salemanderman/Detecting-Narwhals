@@ -22,6 +22,7 @@
 !analysis/finding_outliers.py
 !analysis/pca_sliding_window.py
 !analysis/plot_spectrogram_windows.py
+!analysis/cluster_outliers.py
 
 !evaluation
 !evaluation/validatedChristerCalls.csv
