@@ -6,7 +6,8 @@ Example usage:
         --audio-root data/subsetWithValidatedCalls \
         --npz-root subsetWithValidatedCalls/npzFiles \
         --validation-csv evaluation/validatedChristerCalls.csv \
-        --output-root output/tuning_results_test
+        --output-root output/tuning_results_test \
+        --skip-extraction
 '''
 
 import argparse
@@ -21,12 +22,12 @@ from itertools import product
 
 
 PARAM_GRID = {
-    'n_components':[21, 34], 
-    'mel_start': [9],
-    'mel_end': [None],
-    'window_secs': [5], #[2.0, 5.0, 6.5],
-    'threshold_std':[3], #[3.5, 4.5, 5.5],
-    'distance_metric': ['mahalanobis'],
+    'n_components':[21, 55], 
+    'mel_start': [9, 15],
+    'mel_end': [None, 61],
+    'window_secs': [5, 6.5], #[2.0, 5.0, 6.5],
+    'threshold_std':[3, 4], #[3.5, 4.5, 5.5],
+    'distance_metric': ['mahalanobis', 'euclidean'],
     'pca_method': ['mean_std'],
 }
 
@@ -43,7 +44,7 @@ def run_pipeline(config, audio_root, npz_root, output_root, skip_extraction=Fals
         "--pca-method", config['pca_method'],
         "--distance-metric", config['distance_metric'],
         "--threshold-std", str(config['threshold_std']),
-        "--no-audio-clips",
+        "--no-audio-clips", "--no-plot",
     ]
 
 
@@ -188,7 +189,7 @@ def main():
     print(f"Output: {output_root}\n")
 
     # Run grid search
-    results_df = grid_search(audio_root, npz_root, validation_csv, output_root, tolerance=args.tolerance)
+    results_df = grid_search(audio_root, npz_root, validation_csv, output_root, tolerance=args.tolerance, skip_extraction=args.skip_extraction)
 
     # Save results
     results_csv = output_root / "tuning_results.csv"
