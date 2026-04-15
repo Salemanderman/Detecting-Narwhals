@@ -119,6 +119,29 @@ python analysis/finding_outliers.py \
 ```
 
 
+## Cluster the outliers using k-means
+
+Once you have detected outliers, you can perform k-means clustering on them to group similar types of outliers:
+
+```bash
+python analysis/cluster_outliers.py \
+        --outliers-csv analysis/outlier_plots/outliers.csv \
+        --pca-root analysis/pca_output \
+        --output-root analysis/outlier_clusters \
+        --n-clusters 3 \
+        --cluster-dims 10
+```
+
+This creates:
+- `outliers_clustered.csv`: Original outlier data with cluster assignments added
+- `outlier_cluster_results.npz`: K-means results (labels, centroids, inertia)
+- `outlier_clusters.png`: Visualization of clusters in PCA space
+
+You can adjust:
+- `--n-clusters`: Number of outlier groups to find (default: 3)
+- `--cluster-dims`: How many leading PCA dimensions to use for clustering (default: 10)
+
+
 ## Running the full pipeline for outlier detection with pca with Standard Config
 
 The `run_outlier_pipeline.py` file runs the complete outlier detection pipeline:   
