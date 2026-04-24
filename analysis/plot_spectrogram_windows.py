@@ -130,6 +130,7 @@ def main():
     spec_cfg       = configs.get_specgram_config()
     hop_length     = spec_cfg["hop_length"]      # 512 samples
     audio_sr       = spec_cfg["sample_rate"]     # 64 000 Hz
+    n_fft          = spec_cfg["n_fft"]           # 1024 samples
     secs_per_frame = hop_length / audio_sr       # ~0.008 s / frame
 
     window_frames = max(1, round(window_secs / secs_per_frame))
@@ -139,6 +140,8 @@ def main():
     print(f"Output root:   {output_root}")
     print(f"Window:        {window_secs:.2f} s  ->  {window_frames} frames")
     print(f"Stride:        {stride_secs:.2f} s  ->  {stride_frames} frames")
+    print(f"FFT size:      {n_fft}")
+    print(f"Hop length:    {hop_length}")
     print(f"Mel bins:      [start: {mel_start}, end: {mel_end})  ")
     print(f"Grid columns:  {args.cols}")
 
