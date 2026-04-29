@@ -60,6 +60,34 @@ def window_feature_full(window: np.ndarray) -> np.ndarray:
     """
     return window.flatten()  # (n_mels * window_frames,) vector
 
+def _aci_along_axis(window: np.ndarray, axis: int) -> np.ndarray:
+    """ACI along one axis: sum(|diffs|) / sum(values) for each slice perpendicular to axis."""
+    diffs  = np.abs(np.diff(window, axis=axis)).sum(axis=axis)
+    totals = window.sum(axis=axis)
+    return np.where(totals > 0, diffs / totals, 0.0)
+
+def window_feature_ACI(window: np.ndarray) -> np.ndarray:
+    """
+    ACI per frequency bin (complexity over time for each mel bin) -> (n_mels,) vector.
+    Captures temporal variation normalised by loudness — robust to overall volume shifts.
+    """
+    return _aci_along_axis(window, axis=1)  # diff over time axis
+
+def window_feature_ACI_time(window: np.ndarray) -> np.ndarray:
+    """
+    ACI per time step (spectral complexity at each frame) -> (window_frames,) vector.
+    Captures how spectrally complex each instant is — high during calls, low during silence.
+    Note: dimensionality equals window_frames (~625 for 5s), which is larger than n_mels.
+    """
+    return _aci_along_axis(window, axis=0)  # diff over frequency axis
+
+def window_feature_ACI_both(window: np.ndarray) -> np.ndarray:
+    """
+    Concatenation of ACI over frequency bins and ACI over time steps.
+    -> (n_mels + window_frames,) vector.
+    """
+    return np.concatenate([window_feature_ACI(window), window_feature_ACI_time(window)])
+
 def numpy_pca(X: np.ndarray, n_components: int):
     """
     PCA via economy SVD on zero-centred X (N, D).
@@ -102,7 +130,7 @@ def main():
     ap.add_argument("--feature-key", default="feature", help="Key inside NPZ files (default: 'feature').")
     ap.add_argument("--single-file", default=None, help="Process only a specific file. Provide name of that file.")
     ap.add_argument("--no-plot", action="store_true", help="Skip saving plots.")
-    ap.add_argument("--pca-method", choices=["mean_std", "full_window"], default="mean_std", help="Feature type for PCA.")
+    ap.add_argument("--pca-method", choices=["mean_std", "full_window", "ACI", "ACI_time", "ACI_both"], default="mean_std", help="Feature type for PCA.")
     args = ap.parse_args()
 
     npz_root = Path(args.npz_root)
@@ -172,6 +200,12 @@ def main():
                                                           mel_start=mel_start, mel_end=mel_end):
             if args.pca_method == "mean_std":
                 feat = window_feature(win)
+            elif args.pca_method == "ACI":
+                feat = window_feature_ACI(win)
+            elif args.pca_method == "ACI_time":
+                feat = window_feature_ACI_time(win)
+            elif args.pca_method == "ACI_both":
+                feat = window_feature_ACI_both(win)
             else:
                 feat = window_feature_full(win)
             feature_rows.append(feat)
