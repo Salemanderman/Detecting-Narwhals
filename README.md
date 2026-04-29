@@ -142,6 +142,26 @@ You can adjust:
 - `--cluster-dims`: How many leading PCA dimensions to use for clustering (default: 10)
 
 
+## Sweep cluster counts and compare with validated calls
+
+To run clustering for `k=3` through `k=15`, save each plot, and write a summary that
+looks like `Cluster 3: 31 outliers, 18 validated`, run:
+
+```bash
+python analysis/sweep_outlier_clusters.py
+```
+
+By default this uses:
+- `output/pipeline_result/outliers/outliers.csv`
+- `analysis/pca_output/pca_results.npz`
+- `evaluation/validatedChristerCalls.csv`
+
+It writes the per-`k` clustering outputs into
+`output/pipeline_result/outlier_clusters_sweep/k_<k>/` and saves the combined
+comparison report as `validated_cluster_comparison.txt` and
+`validated_cluster_comparison.csv` in the sweep output directory.
+
+
 ## Running the full pipeline for outlier detection with pca with Standard Config
 
 The `run_outlier_pipeline.py` file runs the complete outlier detection pipeline:   
