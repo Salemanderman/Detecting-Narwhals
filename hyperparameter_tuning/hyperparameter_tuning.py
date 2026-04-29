@@ -22,13 +22,18 @@ from itertools import product
 
 
 PARAM_GRID = {
-    'n_components':[21, 55], 
-    'mel_start': [9, 15],
-    'mel_end': [None, 61],
-    'window_secs': [5, 6.5], #[2.0, 5.0, 6.5],
-    'threshold_std':[3, 4], #[3.5, 4.5, 5.5],
-    'distance_metric': ['mahalanobis', 'euclidean'],
-    'pca_method': ['mean_std'],
+    'n_components':[21, 42],
+    'n_mels': [None, 128],
+    'window_secs': [5], #[2.0, 5.0, 6.5],
+    'threshold_std':[2, 3, 4, 5], #[3.5, 4.5, 5.5],
+    'distance_metric': ['mahalanobis'],
+    'pca_method': ['mean_std', 'ACI', 'ACI_both'],
+}
+
+# mel_start/mel_end are determined by n_mels — not independent grid axes
+MEL_PRESETS = {
+    None:  {'mel_start': 0,   'mel_end': None},
+    128:   {'mel_start': 9,   'mel_end': 128},
 }
 
 
@@ -48,12 +53,15 @@ def run_pipeline(config, audio_root, npz_root, output_root, skip_extraction=Fals
     ]
 
 
+    mel = MEL_PRESETS[config['n_mels']]
+    cmd.extend(["--mel-start", str(mel['mel_start'])])
+    if mel['mel_end'] is not None:
+        cmd.extend(["--mel-end", str(mel['mel_end'])])
+    if config['n_mels'] is not None:
+        cmd.extend(["--n-mels", str(config['n_mels'])])
+
     if skip_extraction:
         cmd.append("--skip-extraction")
-    if config['mel_start'] is not None:
-        cmd.extend(["--mel-start", str(config['mel_start'])])
-    if config['mel_end'] is not None:
-        cmd.extend(["--mel-end", str(config['mel_end'])])
 
 
     root_dir = Path(__file__).parent.parent # Start from project directory (Detecting-Narwhals/)

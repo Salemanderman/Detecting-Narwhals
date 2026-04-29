@@ -7,9 +7,9 @@ def get_specgram_config():
 
     configs = dict(
         sample_rate=64_000,
-        n_fft=1024,
-        win_length=1024,
-        hop_length=512,
+        n_fft=8192,
+        win_length=8192,
+        hop_length=4096,
         window_fn=torch.hann_window,
         resample_rate=None,
         n_mels=None, # n_mels=128, # From 256.
