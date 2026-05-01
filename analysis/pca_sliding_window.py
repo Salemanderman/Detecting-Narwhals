@@ -226,6 +226,13 @@ def main():
     X = np.stack(feature_rows, axis=0)
     print(f"Feature matrix: {X.shape}  (windows × features)")
 
+    # Z-score normalise each feature column before PCA.
+    
+    norm_mean = X.mean(axis=0)
+    norm_std  = X.std(axis=0)
+    norm_std  = np.where(norm_std > 0, norm_std, 1.0)  # keep silent bins at 0 rather than NaN
+    X = (X - norm_mean) / norm_std
+
     # PCA with numpy
     n_components = min(args.n_components, X.shape[0], X.shape[1])
     print(f"Running PCA")
@@ -261,6 +268,9 @@ def main():
         mel_start=mel_start,
         mel_end=mel_end,
         n_components=int(n_components),
+        # Normalisation parameters (applied before PCA)
+        norm_mean=norm_mean,
+        norm_std=norm_std,
     )
 
     print(f"\nSaved to {out_npz}")

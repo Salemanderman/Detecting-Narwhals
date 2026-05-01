@@ -19,14 +19,14 @@ Example usage:
         --n-components 20 \
         --pca-method mean_std \
         --distance-metric mahalanobis \
-        --threshold-std 3
+        --threshold-percentile 95
 
 
 To skip steps that have already been run:
     python run_outlier_pipeline.py \
         --skip-extraction \
         --skip-pca \
-        --threshold-std 3
+        --threshold-percentile 95
 """
 
 import argparse
@@ -58,7 +58,7 @@ def main():
             'n_components': 10,
             'pca_method': 'mean_std',
             'distance_metric': 'mahalanobis',
-            'threshold_std': 3.0,
+            'threshold_percentile': 95.0,
             'skip_extraction': False,
             'skip_pca': False,
             'no_plot': False,
@@ -74,11 +74,11 @@ def main():
     ap.add_argument("--stride-secs", type=float, default=cfg['stride_secs'], help="Stride between windows in seconds (default: non-overlapping).")
     ap.add_argument("--mel-start", type=int, default=cfg['mel_start'], help=f"First mel bin to include (default: {cfg['mel_start'] or 0}).")
     ap.add_argument("--mel-end", type=int, default=cfg['mel_end'], help=f"Last mel bin exclusive (default: {cfg['mel_end'] or 'all'}).")
-    ap.add_argument("--n-mels", type=int, default=cfg['n_mels'], help=f"Number of mel bins in spectrograms (default: {cfg['n_mels'] or 'auto-detect'}).")
+    ap.add_argument("--n-mels", type=int, default=None, help="Number of mel bins in spectrograms (default: auto-detect from files).")
     ap.add_argument("--n-components", type=int, default=cfg['n_components'], help=f"Number of PCA components (default: {cfg['n_components']}).")
-    ap.add_argument("--pca-method", choices=["mean_std", "full_window"], default=cfg['pca_method'], help=f"Feature type for PCA (default: {cfg['pca_method']}).")
+    ap.add_argument("--pca-method", choices=["mean_std", "full_window", "ACI", "ACI_time", "ACI_both"], default=cfg['pca_method'], help=f"Feature type for PCA (default: {cfg['pca_method']}).")
     ap.add_argument("--distance-metric", choices=["euclidean", "mahalanobis"], default=cfg['distance_metric'], help=f"Distance metric for outlier detection (default: {cfg['distance_metric']}).")
-    ap.add_argument("--threshold-std", type=float, default=cfg['threshold_std'], help=f"Number of std deviations for outlier threshold (default: {cfg['threshold_std']}).")
+    ap.add_argument("--threshold-percentile", type=float, default=cfg['threshold_percentile'], help=f"Percentile cutoff for outlier threshold (default: {cfg['threshold_percentile']}).")
     ap.add_argument("--skip-extraction", action="store_true", default=cfg['skip_extraction'], help="Skip spectrogram extraction (use existing .npz files).")
     ap.add_argument("--skip-pca", action="store_true", default=cfg['skip_pca'], help="Skip PCA (use existing pca_results.npz).")
     ap.add_argument("--no-plot", action="store_true", default=cfg['no_plot'], help="Skip plotting in all steps.")
@@ -109,7 +109,7 @@ def main():
     print(f"  Window:       {args.window_secs}s")
     print(f"  Mel bins:     {args.mel_start or 0} to {args.mel_end or 'all'}")
     print(f"  PCA components: {args.n_components}")
-    print(f"  Outlier threshold: {args.threshold_std} std ({args.distance_metric})")
+    print(f"  Outlier threshold: top {100 - args.threshold_percentile:.1f}% ({args.distance_metric})")
 
     # Step 1: Extract spectrograms
     if not args.skip_extraction:
@@ -179,7 +179,7 @@ def main():
         "--plots-root", str(outliers_root),
         "--window-secs", str(args.window_secs),
         "--distance-metric", args.distance_metric,
-        "--threshold-std", str(args.threshold_std),
+        "--threshold-percentile", str(args.threshold_percentile),
         "--save-csv",
     ]
     if args.mel_start is not None:

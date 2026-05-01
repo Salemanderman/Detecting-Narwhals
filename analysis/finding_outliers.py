@@ -69,19 +69,12 @@ def compute_distances(X_pca: np.ndarray, metric: str = "mahalanobis"):
     return distances, mean_pca
 
 
-def find_outliers(distances: np.ndarray, threshold_std: float = 3.0):
+def find_outliers(distances: np.ndarray, threshold_percentile: float = 95.0):
     """
-    Find outliers based on distance threshold.
-
-    Args:
-        distances: array of distances
-        threshold_std: number of standard deviations for threshold
-
-    Returns:
-        outlier_mask: boolean mask of outliers
-        threshold: the computed threshold value
+    Find outliers as the top (100 - threshold_percentile)% most distant windows.
+    Percentile-based threshold is scale-invariant across datasets.
     """
-    threshold = distances.mean() + threshold_std * distances.std()
+    threshold = np.percentile(distances, threshold_percentile)
     outlier_mask = distances > threshold
     return outlier_mask, threshold
 
@@ -258,8 +251,8 @@ def main():
     ap.add_argument("--npz-root", required=True, help="Directory containing the original .npz spectrogram files.")
     ap.add_argument("--distance-metric", choices=["euclidean", "mahalanobis"], default="mahalanobis",
                     help="Distance metric for outlier detection (default: mahalanobis).")
-    ap.add_argument("--threshold-std", type=float, default=3.0,
-                    help="Number of std deviations for outlier threshold (default: 3.0).")
+    ap.add_argument("--threshold-percentile", type=float, default=95.0,
+                    help="Percentile cutoff — flag top (100-p)%% most anomalous windows (default: 95.0).")
     ap.add_argument("--window-secs", type=float, default=5.0,
                     help="Window length in seconds for spectrogram plots (default: 5.0).")
     ap.add_argument("--mel-start", type=int, default=None,
@@ -284,7 +277,7 @@ def main():
     print(f"PCA output: {pca_output_root}")
     print(f"Spectrogram root: {npz_root}")
     print(f"Distance metric: {args.distance_metric}")
-    print(f"Threshold: {args.threshold_std} std deviations")
+    print(f"Threshold: top {100 - args.threshold_percentile:.1f}% (percentile {args.threshold_percentile})")
 
     # List files in PCA output directory
     print(f"\nFiles found at {pca_output_root}:")
@@ -310,7 +303,7 @@ def main():
     print(f"  Min: {distances.min():.3f}, Max: {distances.max():.3f}")
 
     # Find outliers
-    outlier_mask, threshold = find_outliers(distances, threshold_std=args.threshold_std)
+    outlier_mask, threshold = find_outliers(distances, threshold_percentile=args.threshold_percentile)
     outlier_indices = np.asarray(outlier_mask).nonzero()[0]
 
     print(f"\nThreshold: {threshold:.3f}")
@@ -347,7 +340,7 @@ def main():
         with open(report_path, "w") as f:
             f.write("OUTLIER DETECTION REPORT\n\n\n")
             f.write(f"Distance metric: {args.distance_metric}\n")
-            f.write(f"Threshold: {threshold:.3f} ({args.threshold_std} std deviations)\n")
+            f.write(f"Threshold: {threshold:.3f} (top {100 - args.threshold_percentile:.1f}%, percentile {args.threshold_percentile})\n")
             f.write(f"Number of outliers: {len(outlier_indices)} out of {len(distances)} windows\n\n")
             f.write(f"{args.distance_metric} distance stats:\n")
             f.write(f"  Mean: {distances.mean():.3f}, Std: {distances.std():.3f}\n")

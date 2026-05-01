@@ -7,9 +7,9 @@ def get_specgram_config():
 
     configs = dict(
         sample_rate=64_000,
-        n_fft=8192,
-        win_length=8192,
-        hop_length=4096,
+        n_fft=1024,
+        win_length=1024,
+        hop_length=512,
         window_fn=torch.hann_window,
         resample_rate=None,
         n_mels=None, # n_mels=128, # From 256.
@@ -50,7 +50,7 @@ def get_pipeline_config():
 
         # Outlier detection parameters
         distance_metric="mahalanobis",
-        threshold_std=3.0,
+        threshold_percentile=95.0,
 
         # Skip flags
         skip_extraction=False,  # skip npz file extraction (use existing .npz files in output)

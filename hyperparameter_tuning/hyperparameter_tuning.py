@@ -22,12 +22,12 @@ from itertools import product
 
 
 PARAM_GRID = {
-    'n_components':[21, 42],
-    'n_mels': [None, 128],
+    'n_components':[2, 4, 8 ,16, 32, 42, 52, 62],
+    'n_mels': [128],
     'window_secs': [5], #[2.0, 5.0, 6.5],
-    'threshold_std':[2, 3, 4, 5], #[3.5, 4.5, 5.5],
+    'threshold_percentile': [95],
     'distance_metric': ['mahalanobis'],
-    'pca_method': ['mean_std', 'ACI', 'ACI_both'],
+    'pca_method': ['mean_std'],
 }
 
 # mel_start/mel_end are determined by n_mels — not independent grid axes
@@ -48,7 +48,7 @@ def run_pipeline(config, audio_root, npz_root, output_root, skip_extraction=Fals
         "--n-components", str(config['n_components']),
         "--pca-method", config['pca_method'],
         "--distance-metric", config['distance_metric'],
-        "--threshold-std", str(config['threshold_std']),
+        "--threshold-percentile", str(config['threshold_percentile']),
         "--no-audio-clips", "--no-plot",
     ]
 
