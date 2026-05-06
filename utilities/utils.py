@@ -78,6 +78,7 @@ def max_len_collate(batch):
 class PipelineSpecgram(torch.nn.Module):
     def __init__(self, specgram_config:dict):
         super().__init__()
+        self.use_pcen = specgram_config.get("use_pcen", False)
         # Basic spectrogram settings.
         self.sample_rate = specgram_config["sample_rate"]
         self.n_fft = specgram_config["n_fft"]
@@ -128,25 +129,43 @@ class PipelineSpecgram(torch.nn.Module):
         else:
             self.mel_scale = None 
     
+    def _apply_pcen(self, S: torch.Tensor) -> torch.Tensor:
+        """Apply PCEN to a power spectrogram (1, bins, T), return (1, bins, T)."""
+        import librosa
+        S_np = S.squeeze(0).cpu().numpy()  # (bins, T)
+        S_pcen = librosa.pcen(
+            S_np,
+            sr=self.effective_sr,
+            hop_length=self.hop_length,
+            time_constant=4.0,
+            gain=0.98,
+            power=0.3,
+            bias=0.2,
+        )
+        return torch.from_numpy(S_pcen.astype(np.float32)).unsqueeze(0)
+
     def forward(self, waveform: torch.Tensor) -> torch.Tensor:
-        x = self.resample(waveform) # Skips resampling if Identity was called.
-        spec = self.spec(x) # Applies the power spectrogram settings to each input waveform.
-        # Returns shape [C, F, T] for channels, freq bins and time frames.
+        x = self.resample(waveform)
+        spec = self.spec(x)  # (1, F, T) power spectrogram
         print(f"Computed spectrogram with shape {spec.shape} and effective sample rate {self.effective_sr} Hz")
 
-        # p_ref is in Pa^2. Divide by micro-Pascals squared to get reference level.
-        spec_ref = spec / (1e-6**2)
-
-        if self.mel_scale is not None: 
-            mel = self.mel_scale(spec_ref)
-            # Returns shape [C, M, T] for channels, mel bins and time frames. 
-            mel_db = self.to_db(mel) # AmplitudeToDB(stype='power') produces log-mel dB. 
-            print(f"Applied Mel scale with {self.mel_bins} bins, resulting in shape {mel_db.shape}")
-            return mel_db
-        else: 
-            print(f"using frequency bins without Mel scaling, resulting in shape {spec_ref.shape}")
-            spec_db = self.to_db(spec_ref)
-            return spec_db
+        if self.mel_scale is not None:
+            mel = self.mel_scale(spec)  # (1, M, T)
+            if self.use_pcen:
+                print(f"Applied PCEN with {self.mel_bins} mel bins, shape {mel.shape}")
+                return self._apply_pcen(mel)
+            else:
+                mel_db = self.to_db(mel / (1e-6**2))
+                print(f"Applied Mel scale with {self.mel_bins} bins, resulting in shape {mel_db.shape}")
+                return mel_db
+        else:
+            if self.use_pcen:
+                print(f"Applied PCEN (linear freq), shape {spec.shape}")
+                return self._apply_pcen(spec)
+            else:
+                spec_db = self.to_db(spec / (1e-6**2))
+                print(f"using frequency bins without Mel scaling, resulting in shape {spec_db.shape}")
+                return spec_db
 
 # Helper function to reduce the number of sample points in audio data tensors.
 def reduce_tensor(w, max_pts):

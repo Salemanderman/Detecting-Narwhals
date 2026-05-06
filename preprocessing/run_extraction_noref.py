@@ -27,6 +27,7 @@ def main():
     ap.add_argument("--audio-root",  required=True, help="Root folder containing audio files.")
     ap.add_argument("--output-root", required=True, help="Output folder for .npz features and index.")
     ap.add_argument("--subset-len", type=int, default=0, help="Optionally limit to a subset of data.")
+    ap.add_argument("--pcen", action="store_true", default=False, help="Use PCEN instead of log-mel (requires librosa).")
     args = ap.parse_args()
 
     audio_root  = Path(args.audio_root)
@@ -53,8 +54,9 @@ def main():
     print(f"Files: {len(dataset)}")
     print(f"Batches: {len(loader)}")
 
-    # Perform log-mel spectrogram transformation
+    # Perform log-mel (or PCEN) spectrogram transformation
     specgram_config = configs.get_specgram_config()
+    specgram_config["use_pcen"] = args.pcen
     logmel_transf   = utils.PipelineSpecgram(specgram_config=specgram_config).to(device)
     logmel_transf.eval()
     print("Specgram config:\n" + pformat(specgram_config, indent=2, sort_dicts=False))
