@@ -18,6 +18,7 @@ def get_specgram_config():
         pad_mode="reflect", # Default.
         f_min=0,
         f_max=32_000, # 32 kHz is the max frequency for 64 kHz sample rate.
+        use_pcen=False,
     )
 
     return configs

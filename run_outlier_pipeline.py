@@ -84,6 +84,7 @@ def main():
     ap.add_argument("--no-plot", action="store_true", default=cfg['no_plot'], help="Skip plotting in all steps.")
     ap.add_argument("--no-audio-clips", action="store_true", default=cfg['no_audio_clips'], help="Skip saving audio clips for outliers.")
     ap.add_argument("--subset-len", type=int, default=cfg['subset_len'], help=f"Limit to first N audio files (for testing) (default: {cfg['subset_len']}).")
+    ap.add_argument("--pcen", action="store_true", default=False, help="Use PCEN instead of log-mel for spectrogram extraction.")
 
     args = ap.parse_args()
 
@@ -120,6 +121,8 @@ def main():
         ]
         if args.subset_len > 0:
             cmd.extend(["--subset-len", str(args.subset_len)])
+        if args.pcen:
+            cmd.append("--pcen")
 
 
         print(f"\n\n\n\n{'='*60}")
