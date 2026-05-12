@@ -12,7 +12,7 @@ def get_specgram_config():
         hop_length=512,
         window_fn=torch.hann_window,
         resample_rate=None,
-        n_mels=None, # n_mels=128, # From 256.
+        n_mels=128, # n_mels=128, # From 256.
         power=2.0,
         center=True, # Default.
         pad_mode="reflect", # Default.
