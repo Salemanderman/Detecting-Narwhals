@@ -40,10 +40,10 @@ def get_pipeline_config():
         output_root=str(Path("output") / "pipeline_results"),  # should work with any operating system
 
         # Shared parameters
-        window_secs=5,
-        stride_secs=None,
-        mel_start=11,
-        mel_end=None,
+        window_secs=5.0,
+        stride_secs=2.5,
+        mel_start=9,
+        mel_end=128,
         n_mels=128,
 
         # PCA parameters
