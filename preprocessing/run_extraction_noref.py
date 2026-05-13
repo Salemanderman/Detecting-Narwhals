@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import torch
 from torch.utils.data import DataLoader, Subset
+from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -27,7 +28,11 @@ def main():
     ap.add_argument("--audio-root",  required=True, help="Root folder containing audio files.")
     ap.add_argument("--output-root", required=True, help="Output folder for .npz features and index.")
     ap.add_argument("--subset-len", type=int, default=0, help="Optionally limit to a subset of data.")
-    ap.add_argument("--pcen", action="store_true", default=False, help="Use PCEN instead of log-mel (requires librosa).")
+    ap.add_argument("--towsey", action="store_true", default=False, help="Apply Towsey (2013) modal noise removal after spectrogram computation.")
+    ap.add_argument("--towsey-N", type=float, default=0.0, dest="towsey_N", help="Towsey N: std devs above modal background added to threshold (default 0.0).")
+    ap.add_argument("--audio-crop-start-secs", type=int, default=5, dest="audio_crop_start_secs", help="Seconds to cut from the start of each recording (default: 5).")
+    ap.add_argument("--linear-freq", action="store_true", default=False, dest="linear_freq", help="Use linear STFT frequency bins instead of mel-scale (sets n_mels=None).")
+    ap.add_argument("--n-mels", type=int, default=None, dest="n_mels", help="Number of mel bins (default: from config). Ignored if --linear-freq is set.")
     args = ap.parse_args()
 
     audio_root  = Path(args.audio_root)
@@ -35,7 +40,7 @@ def main():
     output_root.mkdir(parents=True, exist_ok=True)
     subset_len = args.subset_len
 
-    start_secs  = 5 # Skip first 5 seconds of each recording due to corruption.
+    start_secs  = args.audio_crop_start_secs
     print(f" [info] cutting off first {start_secs} seconds of each recording.")
     end_secs = 265 # Cut off endings so each file is same length
     print(f" [info] cutting off last {270 - end_secs} seconds of each recording.")
@@ -54,9 +59,14 @@ def main():
     print(f"Files: {len(dataset)}")
     print(f"Batches: {len(loader)}")
 
-    # Perform log-mel (or PCEN) spectrogram transformation
+    # Perform log-mel  spectrogram transformation
     specgram_config = configs.get_specgram_config()
-    specgram_config["use_pcen"] = args.pcen
+    specgram_config["use_towsey"] = args.towsey
+    specgram_config["towsey_N"] = args.towsey_N
+    if args.linear_freq:
+        specgram_config["n_mels"] = None
+    elif args.n_mels is not None:
+        specgram_config["n_mels"] = args.n_mels
     logmel_transf   = utils.PipelineSpecgram(specgram_config=specgram_config).to(device)
     logmel_transf.eval()
     print("Specgram config:\n" + pformat(specgram_config, indent=2, sort_dicts=False))
@@ -67,7 +77,7 @@ def main():
     print("\n[info] Starting feature extraction...")
 
     with torch.no_grad():
-        for i, batch in enumerate(loader, 1):
+        for batch in tqdm(loader, desc="Extracting spectrograms", unit="batch"):
             waveforms = batch["waveforms"]
             srs = batch["sample_rates"]
             paths = batch["paths"]
@@ -108,10 +118,6 @@ def main():
 
                 except Exception as e:
                     print(f"[error] {wav_path}: {e}", file=sys.stderr)
-                    
-            processed_files = min(i * batch_size, len(dataset))
-            if (i * batch_size) > (10 * i):
-                print(f"[info] Processed {processed_files} / {len(dataset)} files.")
 
     print(f"[done] Extracted features for {len(index_rows)} files.")
 

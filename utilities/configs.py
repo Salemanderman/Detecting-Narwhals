@@ -18,7 +18,8 @@ def get_specgram_config():
         pad_mode="reflect", # Default.
         f_min=0,
         f_max=32_000, # 32 kHz is the max frequency for 64 kHz sample rate.
-        use_pcen=False,
+        use_towsey=False,
+        towsey_N=0.0,
     )
 
     return configs
@@ -39,14 +40,14 @@ def get_pipeline_config():
         output_root=str(Path("output") / "pipeline_results"),  # should work with any operating system
 
         # Shared parameters
-        window_secs=5.0,
+        window_secs=3.0,
         stride_secs=None,
-        mel_start=9,
+        mel_start=0,
         mel_end=None,
-        n_mels=128,
+        n_mels=None,
 
         # PCA parameters
-        n_components=20,
+        n_components=42,
         pca_method="mean_std",
 
         # Outlier detection parameters
@@ -61,6 +62,9 @@ def get_pipeline_config():
 
         # Subset flag (for testing)
         subset_len=0,  # only process first n audio files
+
+        # Audio crop (must match between extraction and outlier detection)
+        audio_crop_start_secs=5,  # seconds cut from start of each recording
     )
 
     return config

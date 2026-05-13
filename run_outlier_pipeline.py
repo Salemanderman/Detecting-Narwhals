@@ -64,6 +64,7 @@ def main():
             'no_plot': False,
             'no_audio_clips': False,
             'subset_len': 0,
+            'audio_crop_start_secs': 5,
         }
 
     ap = argparse.ArgumentParser(description="Run full outlier detection pipeline: extraction -> PCA -> outliers")
@@ -84,7 +85,9 @@ def main():
     ap.add_argument("--no-plot", action="store_true", default=cfg['no_plot'], help="Skip plotting in all steps.")
     ap.add_argument("--no-audio-clips", action="store_true", default=cfg['no_audio_clips'], help="Skip saving audio clips for outliers.")
     ap.add_argument("--subset-len", type=int, default=cfg['subset_len'], help=f"Limit to first N audio files (for testing) (default: {cfg['subset_len']}).")
-    ap.add_argument("--pcen", action="store_true", default=False, help="Use PCEN instead of log-mel for spectrogram extraction.")
+    ap.add_argument("--towsey", action="store_true", default=False, help="Apply Towsey (2013) modal noise removal after spectrogram computation.")
+    ap.add_argument("--towsey-N", type=float, default=0.0, dest="towsey_N", help="Towsey N: std devs above modal background added to threshold (default 0.0).")
+    ap.add_argument("--audio-crop-start-secs", type=int, default=cfg.get('audio_crop_start_secs', 5), help="Seconds cut from the start of each recording during extraction (default: 5).")
 
     args = ap.parse_args()
 
@@ -121,8 +124,11 @@ def main():
         ]
         if args.subset_len > 0:
             cmd.extend(["--subset-len", str(args.subset_len)])
-        if args.pcen:
-            cmd.append("--pcen")
+        if args.towsey:
+            cmd.append("--towsey")
+        if args.towsey_N != 0.0:
+            cmd.extend(["--towsey-N", str(args.towsey_N)])
+        cmd.extend(["--audio-crop-start-secs", str(args.audio_crop_start_secs)])
 
 
         print(f"\n\n\n\n{'='*60}")
@@ -191,6 +197,7 @@ def main():
         cmd.extend(["--mel-end", str(args.mel_end)])
     if not args.no_audio_clips:
         cmd.extend(["--audio-root", str(audio_root)])
+    cmd.extend(["--audio-crop-start-secs", str(args.audio_crop_start_secs)])
     if args.no_plot:
         cmd.append("--no-plot")
 

@@ -33,6 +33,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import sys
 from scipy.io import wavfile
+from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -61,7 +62,7 @@ def compute_distances(X_pca: np.ndarray, metric: str = "mahalanobis"):
         inv_cov = np.linalg.inv(cov_pca)
         distances = np.array([
             np.sqrt((X_pca[i] - mean_pca).T @ inv_cov @ (X_pca[i] - mean_pca))
-            for i in range(X_pca.shape[0])
+            for i in tqdm(range(X_pca.shape[0]), desc="Computing distances", unit="window")
         ])
     else:
         raise ValueError(f"Unknown metric: {metric}. Use 'euclidean' or 'mahalanobis'.")
@@ -223,19 +224,20 @@ def save_file_outliers_grid(filename, file_outliers_df, npz_root, window_frames,
     plt.close(fig)
 
 
-def save_audio_clip(audio_path, start_sec, window_sec, save_path):
+def save_audio_clip(audio_path, start_sec, window_sec, save_path, crop_start_secs=5):
     """
     Extract and save an audio clip from a wav file.
 
     Args:
         audio_path: Path to source .wav file
-        start_sec: Start time in seconds
+        start_sec: Start time in seconds (relative to cropped spectrogram)
         window_sec: Window length in seconds
         save_path: Path to save the output .wav file
+        crop_start_secs: Seconds that were cut from the start of the recording during extraction
     """
     sr, audio = wavfile.read(audio_path)
-    start_sample = int((start_sec + 5) * sr) # + 5 since first 5 seconds are cut off in npz files
-    end_sample = int(((start_sec + 5) + window_sec) * sr)
+    start_sample = int((start_sec + crop_start_secs) * sr)
+    end_sample = int(((start_sec + crop_start_secs) + window_sec) * sr)
 
     # Clamp to valid range
     start_sample = max(0, start_sample)
@@ -267,6 +269,8 @@ def main():
                     help="Directory containing raw .wav files. If provided, audio clips will be saved for each outlier.")
     ap.add_argument("--no-plot", action="store_true",
                     help="Skip all plotting.")
+    ap.add_argument("--audio-crop-start-secs", type=int, default=5, dest="audio_crop_start_secs",
+                    help="Seconds cut from the start of each recording during extraction (default: 5).")
     args = ap.parse_args()
 
     pca_output_root = Path(args.pca_root)
@@ -373,7 +377,7 @@ def main():
             grouped = outlier_df.groupby("File")
             print(f"\nSaving outlier grids for {len(grouped)} files to {outliers_root}")
 
-            for filename, file_outliers in grouped:
+            for filename, file_outliers in tqdm(grouped, desc="Saving outlier grids", unit="file"):
                 file_stem = Path(filename).stem
 
                 # Create directory for this file
@@ -388,7 +392,7 @@ def main():
                         save_path, mel_start=args.mel_start, mel_end=args.mel_end
                     )
                 except Exception as e:
-                    print(f"  Error saving {file_stem}: {e}")
+                    tqdm.write(f"  Error saving {file_stem}: {e}")
 
             print(f"  Saved {len(grouped)} grid plots")
 
@@ -403,7 +407,7 @@ def main():
         print(f"\nSaving audio clips for {len(grouped)} files to {outliers_root}")
 
         total_saved = 0
-        for filename, file_outliers in grouped:
+        for filename, file_outliers in tqdm(grouped, desc="Saving audio clips", unit="file"):
             file_stem = Path(filename).stem
 
             # Create directory for this file (will already exist if plots were made)
@@ -415,7 +419,7 @@ def main():
             audio_path = audio_root / wav_filename
 
             if not audio_path.exists():
-                print(f"  Warning: Audio file not found: {audio_path}")
+                tqdm.write(f"  Warning: Audio file not found: {audio_path}")
                 continue
 
             # Save audio clip for each outlier from this file
@@ -425,10 +429,11 @@ def main():
                 save_path = file_dir / clip_filename
 
                 try:
-                    save_audio_clip(audio_path, start_sec, args.window_secs, save_path)
+                    save_audio_clip(audio_path, start_sec, args.window_secs, save_path,
+                                    crop_start_secs=args.audio_crop_start_secs)
                     total_saved += 1
                 except Exception as e:
-                    print(f"  Error saving {clip_filename}: {e}")
+                    tqdm.write(f"  Error saving {clip_filename}: {e}")
 
         print(f"  Saved {total_saved} audio clips")
 

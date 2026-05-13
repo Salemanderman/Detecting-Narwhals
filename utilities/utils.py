@@ -8,6 +8,86 @@ from torch.utils.data import Dataset
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+def towsey_noise_removal(
+    spec: np.ndarray,
+    N: float = 0.0,
+    smooth_window: int = 5,
+    neighbourhood: bool = True,
+    neighbourhood_threshold: float = 2.0,
+) -> np.ndarray:
+    """
+    Towsey (2013) adaptive modal noise subtraction.
+
+    For each frequency bin, builds a histogram of intensity values across all time
+    frames, finds the modal (most frequent) value as the background estimate, and
+    subtracts it. N standard deviations above the mode can optionally be added to
+    the threshold (paper recommends N=0.0 for spectrograms; N>0.1 removes signal).
+
+    Steps from the paper:
+      A. Per-bin: histogram → modal value → subtract (modal + N*std) → truncate to 0
+      B. Smooth noise profile across frequency bins before subtraction
+      C. Neighbourhood suppression: zero pixels whose 9×3 local average < threshold
+
+    Args:
+        spec: (n_bins, n_frames) spectrogram, any scale (dB or linear).
+        N: std devs above mode added to threshold (default 0.0).
+        smooth_window: moving-average width for histogram and profile smoothing.
+        neighbourhood: apply Step C local suppression.
+        neighbourhood_threshold: pixels with local average below this are zeroed.
+            Use ~2.0 for dB spectrograms, ~0.015 for linear-scale spectrograms.
+    Returns:
+        Noise-removed spectrogram, same shape as input, values >= 0.
+    """
+    n_bins, n_frames = spec.shape
+    n_hist_bins = max(10, n_frames // 8)
+    kernel = np.ones(smooth_window) / smooth_window
+    noise_profile = np.zeros(n_bins, dtype=np.float64)
+
+    for i in range(n_bins):
+        row = spec[i].astype(np.float64)
+        lo, hi = row.min(), row.max()
+        if lo >= hi:
+            noise_profile[i] = lo
+            continue
+
+        counts, edges = np.histogram(row, bins=n_hist_bins, range=(lo, hi))
+        counts_s = np.convolve(counts.astype(float), kernel, mode='same')
+
+        # Modal bin, capped at 95th percentile bin to guard against all-signal rows
+        modal_idx = int(np.argmax(counts_s))
+        cap = int(0.95 * n_hist_bins)
+        if modal_idx > cap:
+            modal_idx = cap
+        modal_val = 0.5 * (edges[modal_idx] + edges[modal_idx + 1])
+
+        # Std estimate: walk left from mode until 68% of sub-modal counts are covered
+        std_est = 0.0
+        if N > 0 and modal_idx > 0:
+            sub = counts_s[:modal_idx]
+            total = sub.sum()
+            if total > 0:
+                cumsum = np.cumsum(sub[::-1])
+                idx = min(int(np.searchsorted(cumsum, 0.68 * total)), modal_idx - 1)
+                std_est = (idx + 1) * (hi - lo) / n_hist_bins
+
+        noise_profile[i] = modal_val + N * std_est
+
+    # Step B: smooth noise profile across frequency bins, then subtract.
+    # Edge-pad with the boundary value before convolving so the 2 outermost bins
+    # get a full-window average instead of a zero-padded (underestimated) one.
+    pad = len(kernel) // 2
+    noise_profile = np.convolve(np.pad(noise_profile, pad, mode='edge'), kernel, mode='valid')
+    result = np.maximum(spec - noise_profile[:, np.newaxis], 0.0).astype(np.float32)
+
+    # Step C: zero pixels whose 9-bin × 3-frame local average is below threshold
+    if neighbourhood and n_bins >= 9 and n_frames >= 3:
+        from scipy.ndimage import uniform_filter
+        avg = uniform_filter(result, size=(9, 3), mode='reflect')
+        result = np.where(avg < neighbourhood_threshold, 0.0, result)
+
+    return result
+
+
 # Dataloader built based on PyTorch tutorial.
 # Uses helper max_len_collate().
 class AudioDataset(Dataset):
@@ -78,7 +158,8 @@ def max_len_collate(batch):
 class PipelineSpecgram(torch.nn.Module):
     def __init__(self, specgram_config:dict):
         super().__init__()
-        self.use_pcen = specgram_config.get("use_pcen", False)
+        self.use_towsey = specgram_config.get("use_towsey", False)
+        self.towsey_N = specgram_config.get("towsey_N", 0.0)
         # Basic spectrogram settings.
         self.sample_rate = specgram_config["sample_rate"]
         self.n_fft = specgram_config["n_fft"]
@@ -129,43 +210,26 @@ class PipelineSpecgram(torch.nn.Module):
         else:
             self.mel_scale = None 
     
-    def _apply_pcen(self, S: torch.Tensor) -> torch.Tensor:
-        """Apply PCEN to a power spectrogram (1, bins, T), return (1, bins, T)."""
-        import librosa
-        S_np = S.squeeze(0).cpu().numpy()  # (bins, T)
-        S_pcen = librosa.pcen(
-            S_np,
-            sr=self.effective_sr,
-            hop_length=self.hop_length,
-            time_constant=4.0,
-            gain=0.98,
-            power=0.3,
-            bias=0.2,
-        )
-        return torch.from_numpy(S_pcen.astype(np.float32)).unsqueeze(0)
+    def _apply_towsey(self, S: torch.Tensor) -> torch.Tensor:
+        """Apply Towsey (2013) noise removal to a spectrogram (1, bins, T), return (1, bins, T)."""
+        S_np = S.squeeze(0).cpu().numpy()
+        S_clean = towsey_noise_removal(S_np, N=self.towsey_N)
+        return torch.from_numpy(S_clean).unsqueeze(0).to(S.device)
 
     def forward(self, waveform: torch.Tensor) -> torch.Tensor:
         x = self.resample(waveform)
         spec = self.spec(x)  # (1, F, T) power spectrogram
-        print(f"Computed spectrogram with shape {spec.shape} and effective sample rate {self.effective_sr} Hz")
 
         if self.mel_scale is not None:
             mel = self.mel_scale(spec)  # (1, M, T)
-            if self.use_pcen:
-                print(f"Applied PCEN with {self.mel_bins} mel bins, shape {mel.shape}")
-                return self._apply_pcen(mel)
-            else:
-                mel_db = self.to_db(mel / (1e-6**2))
-                print(f"Applied Mel scale with {self.mel_bins} bins, resulting in shape {mel_db.shape}")
-                return mel_db
+            out = self.to_db(mel / (1e-6**2))
         else:
-            if self.use_pcen:
-                print(f"Applied PCEN (linear freq), shape {spec.shape}")
-                return self._apply_pcen(spec)
-            else:
-                spec_db = self.to_db(spec / (1e-6**2))
-                print(f"using frequency bins without Mel scaling, resulting in shape {spec_db.shape}")
-                return spec_db
+            out = self.to_db(spec / (1e-6**2))
+
+        if self.use_towsey:
+            out = self._apply_towsey(out)
+
+        return out
 
 # Helper function to reduce the number of sample points in audio data tensors.
 def reduce_tensor(w, max_pts):

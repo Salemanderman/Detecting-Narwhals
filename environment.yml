@@ -12,4 +12,6 @@ dependencies:
   - libsndfile
   - ffmpeg
   - scipy
+  - pandas>=1.3
+  - numpy>=1.24
   # remove sox on Windows unless you specifically need CLI sox

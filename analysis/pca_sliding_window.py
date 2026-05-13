@@ -26,6 +26,7 @@ import argparse
 import sys
 from pathlib import Path
 import numpy as np
+from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -188,14 +189,13 @@ def main():
     feature_rows = []  # each row: (2*(mel_end-mel_start),) vector
     window_meta  = []  # (filename, start_frame, start_sec) per window
 
-    for i, npz_path in enumerate(npz_files): #enumerate for progress tracking
+    for npz_path in tqdm(npz_files, desc="Extracting windows", unit="file"):
         try:
             S, sr = futils.load_spectrogram(npz_path, n_mels=n_mels, key=args.feature_key)
         except Exception as e:
-            print(f"  [skip] {npz_path.name}: {e}")
+            tqdm.write(f"  [skip] {npz_path.name}: {e}")
             continue
 
-        n_windows = 0
         for start_frame, win in futils.windows_from_spectrogram(S, window_frames, stride_frames,
                                                           mel_start=mel_start, mel_end=mel_end):
             if args.pca_method == "mean_std":
@@ -214,10 +214,6 @@ def main():
                 "start_frame": int(start_frame),
                 "start_sec": round(start_frame * secs_per_frame, 3),
             })
-            n_windows += 1
-        if (i+1) % 10 == 0:
-            print(f"  {i+1}/{len(npz_files)} processed")
-        # print(f"{npz_path.name}: T={S.shape[1]} frames, {n_windows} windows")
 
     if not feature_rows:
         print("[error] No windows extracted. Check window/stride settings vs recording length.")
