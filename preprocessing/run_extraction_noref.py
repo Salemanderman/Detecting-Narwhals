@@ -8,6 +8,10 @@ import torch
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
+
+def _int_or_none(v):
+    return None if str(v).lower() == "none" else int(v)
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -31,8 +35,7 @@ def main():
     ap.add_argument("--towsey", action="store_true", default=False, help="Apply Towsey (2013) modal noise removal after spectrogram computation.")
     ap.add_argument("--towsey-N", type=float, default=0.0, dest="towsey_N", help="Towsey N: std devs above modal background added to threshold (default 0.0).")
     ap.add_argument("--audio-crop-start-secs", type=int, default=5, dest="audio_crop_start_secs", help="Seconds to cut from the start of each recording (default: 5).")
-    ap.add_argument("--linear-freq", action="store_true", default=False, dest="linear_freq", help="Use linear STFT frequency bins instead of mel-scale (sets n_mels=None).")
-    ap.add_argument("--n-mels", type=int, default=None, dest="n_mels", help="Number of mel bins (default: from config). Ignored if --linear-freq is set.")
+    ap.add_argument("--n-mels", type=_int_or_none, default=None, dest="n_mels", help="Number of mel bins (default: from config)")
     args = ap.parse_args()
 
     audio_root  = Path(args.audio_root)
@@ -63,10 +66,7 @@ def main():
     specgram_config = configs.get_specgram_config()
     specgram_config["use_towsey"] = args.towsey
     specgram_config["towsey_N"] = args.towsey_N
-    if args.linear_freq:
-        specgram_config["n_mels"] = None
-    elif args.n_mels is not None:
-        specgram_config["n_mels"] = args.n_mels
+    specgram_config["n_mels"] = args.n_mels  # None = linear STFT bins, int = mel bins
     logmel_transf   = utils.PipelineSpecgram(specgram_config=specgram_config).to(device)
     logmel_transf.eval()
     print("Specgram config:\n" + pformat(specgram_config, indent=2, sort_dicts=False))

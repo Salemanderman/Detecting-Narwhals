@@ -34,6 +34,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+
+def _int_or_none(v):
+    return None if str(v).lower() == "none" else int(v)
+
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 try:
@@ -75,7 +79,7 @@ def main():
     ap.add_argument("--stride-secs", type=float, default=cfg['stride_secs'], help="Stride between windows in seconds (default: non-overlapping).")
     ap.add_argument("--mel-start", type=int, default=cfg['mel_start'], help=f"First mel bin to include (default: {cfg['mel_start'] or 0}).")
     ap.add_argument("--mel-end", type=int, default=cfg['mel_end'], help=f"Last mel bin exclusive (default: {cfg['mel_end'] or 'all'}).")
-    ap.add_argument("--n-mels", type=int, default=None, help="Number of mel bins in spectrograms (default: auto-detect from files).")
+    ap.add_argument("--n-mels", type=_int_or_none, default=cfg['n_mels'], help="Mel bins for extraction (None = linear STFT bins, int = mel-scale). PCA auto-detects from the produced NPZ files.")
     ap.add_argument("--n-components", type=int, default=cfg['n_components'], help=f"Number of PCA components (default: {cfg['n_components']}).")
     ap.add_argument("--pca-method", choices=["mean_std", "full_window", "ACI", "ACI_time", "ACI_both"], default=cfg['pca_method'], help=f"Feature type for PCA (default: {cfg['pca_method']}).")
     ap.add_argument("--distance-metric", choices=["euclidean", "mahalanobis"], default=cfg['distance_metric'], help=f"Distance metric for outlier detection (default: {cfg['distance_metric']}).")
@@ -88,7 +92,7 @@ def main():
     ap.add_argument("--towsey", action="store_true", default=False, help="Apply Towsey (2013) modal noise removal after spectrogram computation.")
     ap.add_argument("--towsey-N", type=float, default=0.0, dest="towsey_N", help="Towsey N: std devs above modal background added to threshold (default 0.0).")
     ap.add_argument("--audio-crop-start-secs", type=int, default=cfg.get('audio_crop_start_secs', 5), help="Seconds cut from the start of each recording during extraction (default: 5).")
-
+    
     args = ap.parse_args()
 
     # Setup paths
@@ -129,6 +133,8 @@ def main():
         if args.towsey_N != 0.0:
             cmd.extend(["--towsey-N", str(args.towsey_N)])
         cmd.extend(["--audio-crop-start-secs", str(args.audio_crop_start_secs)])
+        if args.n_mels is not None:
+            cmd.extend(["--n-mels", str(args.n_mels)])
 
 
         print(f"\n\n\n\n{'='*60}")

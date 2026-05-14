@@ -62,7 +62,7 @@ def get_window(npz_path: Path, start_sec: float, window_frames: int,
     secs_per_frame = spec_cfg["hop_length"] / spec_cfg["sample_rate"]
     start_frame = round(start_sec / secs_per_frame)
 
-    S, sr = load_spectrogram(npz_path, n_mels=spec_cfg["n_mels"])
+    S, sr = load_spectrogram(npz_path, n_mels=None)
     n_mels, T = S.shape
 
     if mel_start is None:
