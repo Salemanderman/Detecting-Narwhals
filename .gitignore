@@ -30,7 +30,9 @@
 !evaluation/compareChristerCalls.py
 
 !clustering
-!clustering/cluster_outliers.py
+!clustering/cluster.py
+!clustering/clustering_core.py
+!clustering/clustering_plots.py
 
 !hyperparameter_tuning
 !hyperparameter_tuning/hyperparameter_tuning.py
