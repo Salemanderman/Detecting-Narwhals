@@ -22,13 +22,15 @@
 !analysis/finding_outliers.py
 !analysis/pca_sliding_window.py
 !analysis/plot_spectrogram_windows.py
-!analysis/cluster_outliers.py
 !analysis/towsey_walkthrough.ipynb
 !analysis/calculate_mean_values_spectrogram.ipynb
 
 !evaluation
 !evaluation/validatedChristerCalls.csv
 !evaluation/compareChristerCalls.py
+
+!clustering
+!clustering/cluster_outliers.py
 
 !hyperparameter_tuning
 !hyperparameter_tuning/hyperparameter_tuning.py
