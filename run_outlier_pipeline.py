@@ -81,7 +81,7 @@ def main():
     ap.add_argument("--mel-end", type=int, default=cfg['mel_end'], help=f"Last mel bin exclusive (default: {cfg['mel_end'] or 'all'}).")
     ap.add_argument("--n-mels", type=_int_or_none, default=cfg['n_mels'], help="Mel bins for extraction (None = linear STFT bins, int = mel-scale). PCA auto-detects from the produced NPZ files.")
     ap.add_argument("--n-components", type=int, default=cfg['n_components'], help=f"Number of PCA components (default: {cfg['n_components']}).")
-    ap.add_argument("--pca-method", choices=["mean_std", "full_window", "ACI", "ACI_time", "ACI_both"], default=cfg['pca_method'], help=f"Feature type for PCA (default: {cfg['pca_method']}).")
+    ap.add_argument("--pca-method", choices=["mean_std", "full_window"], default=cfg['pca_method'], help=f"Feature type for PCA (default: {cfg['pca_method']}).")
     ap.add_argument("--distance-metric", choices=["euclidean", "mahalanobis"], default=cfg['distance_metric'], help=f"Distance metric for outlier detection (default: {cfg['distance_metric']}).")
     ap.add_argument("--threshold-percentile", type=float, default=cfg['threshold_percentile'], help=f"Percentile cutoff for outlier threshold (default: {cfg['threshold_percentile']}).")
     ap.add_argument("--skip-extraction", action="store_true", default=cfg['skip_extraction'], help="Skip spectrogram extraction (use existing .npz files).")

@@ -24,6 +24,7 @@
 !analysis/plot_spectrogram_windows.py
 !analysis/cluster_outliers.py
 !analysis/towsey_walkthrough.ipynb
+!analysis/calculate_mean_values_spectrogram.ipynb
 
 !evaluation
 !evaluation/validatedChristerCalls.csv
