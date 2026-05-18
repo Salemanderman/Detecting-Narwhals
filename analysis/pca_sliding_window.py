@@ -26,6 +26,7 @@ import argparse
 import sys
 from pathlib import Path
 import numpy as np
+from sklearn.decomposition import IncrementalPCA
 
 
 def _int_or_none(v):
@@ -66,30 +67,6 @@ def window_feature_full(window: np.ndarray) -> np.ndarray:
     return window.flatten()  # (n_mels * window_frames,) vector
 
 
-def numpy_pca(X: np.ndarray, n_components: int):
-    """
-    PCA via economy SVD on zero-centred X (N, D).
-    Returns:
-        X_pca:     (N, n_components) projected data
-        components:(n_components, D) principal axes (unit vectors)
-        mean:      (D,) column means used for centring
-        explained_variance_ratio: (n_components,)
-    """
-    mean = X.mean(axis=0)
-    Xcentered = X - mean # centred
-
-    # SVD on the centred matrix; economy form keeps at most min(N,D) singular values.
-    U, s, Vt = np.linalg.svd(Xcentered, full_matrices=False)
-
-    # Variance explained by each component.
-    var_total = (s ** 2).sum()
-    evr = (s ** 2) / var_total if var_total > 0 else np.zeros_like(s)
-
-    k = min(n_components, len(s))
-    components = Vt[:k]                  # (k, D)
-    X_pca = Xcentered @ components.T       # (N, k)
-
-    return X_pca, components, mean, evr[:k]
 
 
 
@@ -107,6 +84,7 @@ def main():
     ap.add_argument("--n-mels", type=_int_or_none, default=None, help="Total mel bins in the NPZ files (default: auto-detect from first file).")
     ap.add_argument("--feature-key", default="feature", help="Key inside NPZ files (default: 'feature').")
     ap.add_argument("--single-file", default=None, help="Process only a specific file. Provide name of that file.")
+    ap.add_argument("--batch-size", type=int, default=2048, help="Batch size for IncrementalPCA fitting (default: 2048).")
     ap.add_argument("--no-plot", action="store_true", help="Skip saving plots.")
     ap.add_argument("--pca-method", choices=["mean_std", "full_window"], default="mean_std", help="Feature type for PCA.")
     args = ap.parse_args()
@@ -200,11 +178,19 @@ def main():
     norm_std  = np.where(norm_std > 0, norm_std, 1.0)  # keep silent bins at 0 rather than NaN
     X = (X - norm_mean) / norm_std
 
-    # PCA with numpy
+    # PCA with IncrementalPCA
     n_components = min(args.n_components, X.shape[0], X.shape[1])
-    print(f"Running PCA")
+    batch_size = max(args.batch_size, n_components + 1)
+    print(f"Running IncrementalPCA (batch_size={batch_size})")
 
-    X_pca, components, pca_mean, evr = numpy_pca(X, n_components)
+    ipca = IncrementalPCA(n_components=n_components)
+    for i in tqdm(range(0, len(X), batch_size), desc="Fitting PCA", unit="batch"):
+        ipca.partial_fit(X[i:i + batch_size])
+
+    X_pca = ipca.transform(X)
+    components = ipca.components_
+    pca_mean = ipca.mean_
+    evr = ipca.explained_variance_ratio_
 
     print(f"Variance explained: "
           f"PC1={evr[0]*100:.1f}% "

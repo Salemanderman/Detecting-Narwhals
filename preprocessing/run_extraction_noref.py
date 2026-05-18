@@ -35,7 +35,8 @@ def main():
     ap.add_argument("--towsey", action="store_true", default=False, help="Apply Towsey (2013) modal noise removal after spectrogram computation.")
     ap.add_argument("--towsey-N", type=float, default=0.0, dest="towsey_N", help="Towsey N: std devs above modal background added to threshold (default 0.0).")
     ap.add_argument("--audio-crop-start-secs", type=int, default=5, dest="audio_crop_start_secs", help="Seconds to cut from the start of each recording (default: 5).")
-    ap.add_argument("--n-mels", type=_int_or_none, default=None, dest="n_mels", help="Number of mel bins (default: from config)")
+    ap.add_argument("--n-mels",       type=_int_or_none, default=None, dest="n_mels",       help="Number of mel bins (default: from config)")
+    ap.add_argument("--num-workers",  type=int,          default=4,    dest="num_workers",   help="DataLoader worker processes for parallel file loading (default: 4)")
     args = ap.parse_args()
 
     audio_root  = Path(args.audio_root)
@@ -58,7 +59,8 @@ def main():
     dataset = utils.AudioDataset(audio_root, target_sr=64_000, start_secs=start_secs, end_secs=end_secs)
     if subset_len > 0:
         dataset = Subset(dataset, list(range(min(subset_len, len(dataset))))) # takes first N samples
-    loader  = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=utils.max_len_collate) # Only shuffle data when training.
+    loader  = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=utils.max_len_collate,
+                         num_workers=args.num_workers, pin_memory=(device.type == "cuda"))
     print(f"Files: {len(dataset)}")
     print(f"Batches: {len(loader)}")
 
@@ -85,14 +87,23 @@ def main():
             if waveforms.ndim == 2:  # (B, T) -> (B, 1, T)
                 waveforms = waveforms.unsqueeze(1)
 
-            for b in range(waveforms.size(0)):
+            # Run STFT + mel on the whole batch at once on GPU
+            wf_batch = waveforms.to(device=device, dtype=torch.float32)
+            specs = logmel_transf.spec(wf_batch)                          # (B, 1, F, T)
+            if logmel_transf.mel_scale is not None:
+                specs = logmel_transf.mel_scale(specs)                    # (B, 1, M, T)
+            specs = logmel_transf.to_db(specs / (1e-6 ** 2))             # (B, 1, bins, T)
+
+            for b in range(wf_batch.size(0)):
                 wav_path = Path(paths[b])
-                wf = waveforms[b].to(device=device, dtype=torch.float32)
-                sr_val = _to_int(srs[b])
+                sr_val   = _to_int(srs[b])
+                feat     = specs[b]                                       # (1, bins, T)
+
+                # Towsey is numpy-based so runs per-file on CPU
+                if logmel_transf.use_towsey:
+                    feat = logmel_transf._apply_towsey(feat)
 
                 try:
-                    feat = logmel_transf(wf)
-
                     # Mirror input folder structure under output_root.
                     try:
                         out_dir = output_root / wav_path.parent.relative_to(audio_root)

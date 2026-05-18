@@ -92,6 +92,7 @@ def main():
     ap.add_argument("--towsey", action="store_true", default=False, help="Apply Towsey (2013) modal noise removal after spectrogram computation.")
     ap.add_argument("--towsey-N", type=float, default=0.0, dest="towsey_N", help="Towsey N: std devs above modal background added to threshold (default 0.0).")
     ap.add_argument("--audio-crop-start-secs", type=int, default=cfg.get('audio_crop_start_secs', 5), help="Seconds cut from the start of each recording during extraction (default: 5).")
+    ap.add_argument("--num-workers", type=int, default=4, help="DataLoader worker processes for parallel file loading during extraction (default: 4, use 0 on Windows if errors occur).")
     
     args = ap.parse_args()
 
@@ -133,6 +134,7 @@ def main():
         if args.towsey_N != 0.0:
             cmd.extend(["--towsey-N", str(args.towsey_N)])
         cmd.extend(["--audio-crop-start-secs", str(args.audio_crop_start_secs)])
+        cmd.extend(["--num-workers", str(args.num_workers)])
         if args.n_mels is not None:
             cmd.extend(["--n-mels", str(args.n_mels)])
 
