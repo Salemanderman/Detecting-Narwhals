@@ -36,7 +36,8 @@ def main():
     ap.add_argument("--towsey-N", type=float, default=0.0, dest="towsey_N", help="Towsey N: std devs above modal background added to threshold (default 0.0).")
     ap.add_argument("--audio-crop-start-secs", type=int, default=5, dest="audio_crop_start_secs", help="Seconds to cut from the start of each recording (default: 5).")
     ap.add_argument("--n-mels",       type=_int_or_none, default=None, dest="n_mels",       help="Number of mel bins (default: from config)")
-    ap.add_argument("--num-workers",  type=int,          default=4,    dest="num_workers",   help="DataLoader worker processes for parallel file loading (default: 4)")
+    ap.add_argument("--num-workers",  type=int, default=4,  dest="num_workers", help="DataLoader worker processes for parallel file loading (default: 4)")
+    ap.add_argument("--batch-size",   type=int, default=32,              help="Files processed per GPU batch (default: 32, reduce if GPU runs out of memory)")
     args = ap.parse_args()
 
     audio_root  = Path(args.audio_root)
@@ -48,7 +49,7 @@ def main():
     print(f" [info] cutting off first {start_secs} seconds of each recording.")
     end_secs = 265 # Cut off endings so each file is same length
     print(f" [info] cutting off last {270 - end_secs} seconds of each recording.")
-    batch_size = 32
+    batch_size = args.batch_size
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Input:  {audio_root}")
@@ -94,7 +95,11 @@ def main():
                 specs = logmel_transf.mel_scale(specs)                    # (B, 1, M, T)
             specs = logmel_transf.to_db(specs / (1e-6 ** 2))             # (B, 1, bins, T)
 
-            for b in range(wf_batch.size(0)):
+            # Move full batch to CPU in one transfer and free GPU memory immediately
+            specs = specs.cpu()
+            del wf_batch
+
+            for b in range(specs.size(0)):
                 wav_path = Path(paths[b])
                 sr_val   = _to_int(srs[b])
                 feat     = specs[b]                                       # (1, bins, T)
