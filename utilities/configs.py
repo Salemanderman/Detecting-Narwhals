@@ -42,7 +42,7 @@ def get_pipeline_config():
         # Shared parameters
         window_secs=5,
         stride_secs=None,
-        mel_start=9,
+        mel_start=11,
         mel_end=None,
         n_mels=128,
 

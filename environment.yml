@@ -16,5 +16,6 @@ dependencies:
   - scipy
   - pandas>=1.3
   - numpy>=1.24
+  - scikit-learn
   - tqdm
   # remove sox on Windows unless you specifically need CLI sox

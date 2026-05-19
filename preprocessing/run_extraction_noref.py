@@ -37,7 +37,7 @@ def main():
     ap.add_argument("--audio-crop-start-secs", type=int, default=5, dest="audio_crop_start_secs", help="Seconds to cut from the start of each recording (default: 5).")
     ap.add_argument("--n-mels",       type=_int_or_none, default=None, dest="n_mels",       help="Number of mel bins (default: from config)")
     ap.add_argument("--num-workers",  type=int, default=4,  dest="num_workers", help="DataLoader worker processes for parallel file loading (default: 4)")
-    ap.add_argument("--batch-size",   type=int, default=32,              help="Files processed per GPU batch (default: 32, reduce if GPU runs out of memory)")
+    ap.add_argument("--batch-size",   type=int, default=16,              help="Files processed per GPU batch (default: 16, reduce if GPU runs out of memory)")
     args = ap.parse_args()
 
     audio_root  = Path(args.audio_root)
