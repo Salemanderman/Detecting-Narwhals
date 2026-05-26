@@ -33,6 +33,8 @@ def main():
     ap.add_argument("--audio-crop-start-secs", type=int, default=5 , dest="audio_crop_start_secs", help="Seconds to cut from the start of each recording (default: 5).")
     ap.add_argument("--linear-freq", action="store_true", default=False, help="Use linear frequency scale instead of mel scale.")
     ap.add_argument("--n-mels", type=int, default=None, dest="n_mels", help="Number of mel bins (default: from config). Ignored if --linear-freq is set.")
+    ap.add_argument("--num-workers", type=int, default=4, dest="num_workers", help="DataLoader worker processes (default: 4, use 0 on Windows if errors occur).")
+    ap.add_argument("--batch-size", type=int, default=32, dest="batch_size", help="Files per GPU batch (default: 32).")
     args = ap.parse_args()
 
     audio_root  = Path(args.audio_root)
@@ -44,7 +46,7 @@ def main():
     print(f" [info] cutting off first {start_secs} seconds of each recording.")
     end_secs = 265 # Cut off endings so each file is same length
     print(f" [info] cutting off last {270 - end_secs} seconds of each recording.")
-    batch_size = 32
+    batch_size = args.batch_size
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Input:  {audio_root}")
@@ -55,7 +57,7 @@ def main():
     dataset = utils.AudioDataset(audio_root, target_sr=64_000, start_secs=start_secs, end_secs=end_secs)
     if subset_len > 0:
         dataset = Subset(dataset, list(range(min(subset_len, len(dataset))))) # takes first N samples
-    loader  = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=utils.max_len_collate) # Only shuffle data when training.
+    loader  = DataLoader(dataset, batch_size=batch_size, num_workers=args.num_workers, shuffle=False, collate_fn=utils.max_len_collate)
     print(f"Files: {len(dataset)}")
     print(f"Batches: {len(loader)}")
 
