@@ -2,11 +2,13 @@ name: narwhal_env
 channels:
   - pytorch
   - conda-forge
+  - nvidia
   - defaults
 dependencies:
   - python=3.12
   - pytorch=2.5.*
   - torchaudio=2.5.*
+  - pytorch-cuda=12.1
   - matplotlib
   - ipykernel
   - libsndfile
@@ -14,4 +16,6 @@ dependencies:
   - scipy
   - pandas>=1.3
   - numpy>=1.24
+  - scikit-learn
+  - tqdm
   # remove sox on Windows unless you specifically need CLI sox

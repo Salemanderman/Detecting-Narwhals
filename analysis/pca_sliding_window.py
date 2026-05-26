@@ -68,7 +68,30 @@ def window_feature_full(window: np.ndarray) -> np.ndarray:
     """
     return window.flatten()  # (n_mels * window_frames,) vector
 
+def numpy_pca(X: np.ndarray, n_components: int):
+    """
+    PCA via economy SVD on zero-centred X (N, D).
+    Returns:
+        X_pca:     (N, n_components) projected data
+        components:(n_components, D) principal axes (unit vectors)
+        mean:      (D,) column means used for centring
+        explained_variance_ratio: (n_components,)
+    """
+    mean = X.mean(axis=0)
+    Xcentered = X - mean # centred
 
+    # SVD on the centred matrix; economy form keeps at most min(N,D) singular values.
+    U, s, Vt = np.linalg.svd(Xcentered, full_matrices=False)
+
+    # Variance explained by each component.
+    var_total = (s ** 2).sum()
+    evr = (s ** 2) / var_total if var_total > 0 else np.zeros_like(s)
+
+    k = min(n_components, len(s))
+    components = Vt[:k]                  # (k, D)
+    X_pca = Xcentered @ components.T       # (N, k)
+
+    return X_pca, components, mean, evr[:k]
 
 
 

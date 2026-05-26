@@ -23,8 +23,12 @@
 !analysis/pca_sliding_window.py
 !analysis/plot_spectrogram_windows.py
 !analysis/towsey_walkthrough.ipynb
+<<<<<<< HEAD
+!analysis/autoencoder_anomaly_detection.ipynb
+!analysis/autoencoder_results/evaluation_set
+=======
 !analysis/calculate_mean_values_spectrogram.ipynb
-!analysis/plot_towsey_comparison.py
+>>>>>>> 166198bc39a4965509b3847ee1a38c1043f90c9d
 
 !evaluation
 !evaluation/validatedChristerCalls.csv
