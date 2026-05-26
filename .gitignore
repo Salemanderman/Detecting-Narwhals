@@ -34,6 +34,7 @@
 !clustering/cluster.py
 !clustering/clustering_core.py
 !clustering/clustering_plots.py
+!clustering/interactive_cluster_review.py
 
 !hyperparameter_tuning
 !hyperparameter_tuning/hyperparameter_tuning.py

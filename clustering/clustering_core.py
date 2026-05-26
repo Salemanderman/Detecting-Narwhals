@@ -3,22 +3,14 @@ Shared clustering algorithms, feature extraction, and evaluation metrics.
 No matplotlib — pure computation only.
 """
 
-import sys
 import numpy as np
 import pandas as pd
-from pathlib import Path
 from tqdm import tqdm
 from sklearn.cluster import KMeans, HDBSCAN, AgglomerativeClustering, OPTICS
-from sklearn.mixture import GaussianMixture
+from sklearn.mixture import GaussianMixture, BayesianGaussianMixture
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-
-import utilities.feature_utils as futils
-
-NEEDS_K   = {"kmeans", "gmm", "agglomerative"}
-HAS_NOISE = {"hdbscan", "optics"}
+NEEDS_K = {"kmeans", "gmm", "agglomerative"}
 
 
 def compute_distances(X_pca: np.ndarray, metric: str = "euclidean") -> np.ndarray:
@@ -34,67 +26,94 @@ def compute_distances(X_pca: np.ndarray, metric: str = "euclidean") -> np.ndarra
     ])
 
 
-def acoustic_features(window: np.ndarray, low_band_bins: int = None) -> np.ndarray:
-    """(n_bins, n_frames) spectrogram window → 10 scalar features."""
+def acoustic_features_extended(window: np.ndarray, low_band_bins: int = None) -> np.ndarray:
+    """(n_bins, n_frames) spectrogram window → 31 acoustic features."""
     eps          = 1e-10
-    n_bins       = window.shape[0]
+    n_bins, n_frames = window.shape
     mean_per_bin = window.mean(axis=1)
     total_energy = mean_per_bin.sum() + eps
     frame_energy = window.mean(axis=0)
+    bins         = np.arange(n_bins, dtype=float)
 
-    energy    = float(total_energy / n_bins)
-    aci       = float(np.abs(np.diff(window, axis=1)).sum() / (window.sum() + eps))
-    centroid  = float(np.dot(np.arange(n_bins, dtype=float), mean_per_bin) / total_energy)
-    flatness  = min(float(np.exp(np.mean(np.log(mean_per_bin + eps))) /
-                          (total_energy / n_bins + eps)), 1.0)
-    occupancy = float((frame_energy > frame_energy.mean() * 0.5).mean())
-    low_end   = low_band_bins or max(1, n_bins // 3)
-    low_frac  = float(mean_per_bin[:low_end].sum() / total_energy)
-    impulse   = float(window.max(axis=0).mean() / (frame_energy.mean() + eps))
-    spectral_std        = float(mean_per_bin.std())
-    temporal_smoothness = float(frame_energy.std() / (frame_energy.mean() + eps))
-    top_n               = max(1, n_bins // 10)
-    peak_concentration  = float(np.sort(mean_per_bin)[-top_n:].sum() / total_energy)
+    # spectral shape
+    energy       = float(total_energy / n_bins)
+    log_energy   = float(np.log(total_energy + eps))
+    aci          = float(np.abs(np.diff(window, axis=1)).sum() / (window.sum() + eps))
+    centroid     = float(np.dot(bins, mean_per_bin) / total_energy)
+    bandwidth    = float(np.sqrt(np.dot((bins - centroid) ** 2, mean_per_bin) / total_energy))
+    cumsum       = np.cumsum(mean_per_bin)
+    rolloff_85   = float(np.searchsorted(cumsum, 0.85 * cumsum[-1]))
+    bw_90        = float(np.searchsorted(cumsum, 0.90 * cumsum[-1]) -
+                         np.searchsorted(cumsum, 0.10 * cumsum[-1]))
+    flatness     = min(float(np.exp(np.mean(np.log(mean_per_bin + eps))) /
+                             (total_energy / n_bins + eps)), 1.0)
+    p            = mean_per_bin / total_energy
+    spectral_ent = float(-np.sum(p * np.log2(p + eps)))
+    norm_bins    = bins - centroid
+    spec_skew    = float(np.dot(norm_bins ** 3, mean_per_bin) /
+                         (total_energy * (bandwidth + eps) ** 3))
+    spec_kurt    = float(np.dot(norm_bins ** 4, mean_per_bin) /
+                         (total_energy * (bandwidth + eps) ** 4))
+    peak_bin     = float(np.argmax(mean_per_bin))
+    top_n        = max(1, n_bins // 10)
+    peak_conc    = float(np.sort(mean_per_bin)[-top_n:].sum() / total_energy)
+    spectral_std = float(mean_per_bin.std())
 
-    return np.array([energy, aci, centroid, flatness, occupancy, low_frac, impulse,
-                     spectral_std, temporal_smoothness, peak_concentration], dtype=np.float32)
+    # band fractions
+    low_end  = low_band_bins or max(1, n_bins // 3)
+    mid_end  = 2 * low_end
+    low_frac = float(mean_per_bin[:low_end].sum() / total_energy)
+    mid_frac = float(mean_per_bin[low_end:mid_end].sum() / total_energy)
+    high_frac = float(mean_per_bin[mid_end:].sum() / total_energy)
+
+    # spectral contrast and flux
+    n_c           = max(1, n_bins // 10)
+    sorted_bins   = np.sort(mean_per_bin)
+    spec_contrast = float(sorted_bins[-n_c:].mean() / (sorted_bins[:n_c].mean() + eps))
+    spec_flux     = float(np.mean(np.abs(np.diff(window, axis=1)).sum(axis=0)))
+
+    # temporal features
+    occupancy    = float((frame_energy > frame_energy.mean() * 0.5).mean())
+    impulse      = float(window.max(axis=0).mean() / (frame_energy.mean() + eps))
+    rms_energy   = float(np.sqrt((frame_energy ** 2).mean()))
+    crest_factor = float(frame_energy.max() / (rms_energy + eps))
+    temp_smooth  = float(frame_energy.std() / (frame_energy.mean() + eps))
+    fe_norm      = frame_energy / (frame_energy.sum() + eps)
+    temporal_ent = float(-np.sum(fe_norm * np.log2(fe_norm + eps)))
+    fe_std       = frame_energy.std() + eps
+    temp_skew    = float(np.mean(((frame_energy - frame_energy.mean()) / fe_std) ** 3))
+    temp_kurt    = float(np.mean(((frame_energy - frame_energy.mean()) / fe_std) ** 4))
+    rise_time    = float(np.argmax(frame_energy) / (n_frames - 1 + eps))
+    n_peaks      = float(np.sum(np.diff(np.sign(np.diff(mean_per_bin))) < 0))
+    temp_iqr     = float(np.percentile(frame_energy, 75) - np.percentile(frame_energy, 25))
+
+    return np.array([
+        energy, log_energy, aci, centroid, bandwidth, rolloff_85, bw_90, flatness,
+        spectral_ent, spec_skew, spec_kurt, peak_bin, peak_conc, spectral_std,
+        low_frac, mid_frac, high_frac, spec_contrast, spec_flux,
+        occupancy, impulse, rms_energy, crest_factor, temp_smooth,
+        temporal_ent, temp_skew, temp_kurt, rise_time, n_peaks, temp_iqr,
+        float(np.sum(frame_energy > frame_energy.mean())),
+    ], dtype=np.float32)
 
 
-def load_acoustic_features(df, npz_root, window_frames, spec_cfg, mel_start, mel_end):
-    """Load spectrogram windows and compute acoustic features for every row in df."""
-    secs_per_frame = spec_cfg["hop_length"] / spec_cfg["sample_rate"]
-    cache, rows = {}, []
-    for _, row in tqdm(df.iterrows(), total=len(df), desc="Acoustic features", unit="window"):
-        path = npz_root / row["File"]
-        if path not in cache:
-            try:
-                cache[path], _ = futils.load_spectrogram(path, n_mels=None)
-            except Exception as e:
-                print(f"  [warn] {path}: {e}")
-                cache[path] = None
-        S  = cache[path]
-        ms = mel_start or 0
-        me = mel_end or (S.shape[0] if S is not None else 0)
-        t  = round(float(row["Start Time (s)"]) / secs_per_frame)
-        try:
-            if S is None:
-                raise ValueError("spectrogram not loaded")
-            w = S[ms:me, t:t + window_frames]
-            if w.shape[1] < window_frames:
-                w = np.pad(w, ((0, 0), (0, window_frames - w.shape[1])))
-            feat = acoustic_features(w)
-        except Exception as e:
-            print(f"  [warn] {row['File']} t={row['Start Time (s)']}: {e}")
-            feat = np.zeros(10, dtype=np.float32)
-        rows.append(feat)
-    return np.stack(rows)
+def mfcc_features(window: np.ndarray, n_mfcc: int = 20) -> np.ndarray:
+    """(n_bins, n_frames) log-mel spectrogram window → 2*n_mfcc MFCC features (mean + std).
+
+    Applies DCT along the frequency axis to each frame, keeps the first n_mfcc
+    coefficients, then summarises across time with mean and std.
+    """
+    from scipy.fft import dct
+    # window is already log-mel; DCT along frequency axis → (n_mfcc, n_frames)
+    mfccs = dct(window, axis=0, norm="ortho")[:n_mfcc, :]
+    return np.concatenate([mfccs.mean(axis=1), mfccs.std(axis=1)]).astype(np.float32)
 
 
 def run_clustering(X_norm: np.ndarray, args) -> np.ndarray:
     """Run the selected clustering algorithm and return an integer label array."""
     algo = args.algorithm
     if algo == "kmeans":
-        return KMeans(n_clusters=args.n_clusters, n_init=args.n_init,
+        return KMeans(n_clusters=args.n_clusters, n_init=10,
                       random_state=args.seed).fit_predict(X_norm)
     elif algo == "gmm":
         return GaussianMixture(n_components=args.n_clusters,
@@ -106,6 +125,17 @@ def run_clustering(X_norm: np.ndarray, args) -> np.ndarray:
                        min_samples=args.min_samples or args.min_cluster_size).fit_predict(X_norm)
     elif algo == "optics":
         return OPTICS(min_samples=args.min_samples or 5).fit_predict(X_norm)
+    elif algo == "dpmm":
+        max_k       = getattr(args, "dpmm_max_components", 20)
+        alpha       = getattr(args, "dpmm_concentration",  0.01)
+        return BayesianGaussianMixture(
+            n_components=max_k,
+            covariance_type="full",
+            weight_concentration_prior_type="dirichlet_process",
+            weight_concentration_prior=alpha,
+            random_state=args.seed,
+            max_iter=200,
+        ).fit_predict(X_norm)
     raise ValueError(f"Unknown algorithm: {algo}")
 
 

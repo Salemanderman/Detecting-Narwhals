@@ -23,9 +23,11 @@ Or for a single file:
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 import numpy as np
+import pandas as pd
 from sklearn.decomposition import IncrementalPCA
 
 
@@ -87,11 +89,16 @@ def main():
     ap.add_argument("--batch-size", type=int, default=2048, help="Batch size for IncrementalPCA fitting (default: 2048).")
     ap.add_argument("--no-plot", action="store_true", help="Skip saving plots.")
     ap.add_argument("--pca-method", choices=["mean_std", "full_window"], default="mean_std", help="Feature type for PCA.")
+    ap.add_argument("--filter-csv", default=None,
+                    help="Only embed windows listed in this CSV (File + Start Time (s)). "
+                         "Used for iterative clustering on a subset.")
     args = ap.parse_args()
 
     npz_root = Path(args.npz_root)
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
+    with open(output_root / "run_config.json", "w") as f:
+        json.dump(vars(args), f, indent=2)
 
 
     window_secs = args.window_secs
@@ -115,6 +122,13 @@ def main():
     if not npz_files:
         print(f"ERROR, No NPZ files found under {npz_root}")
         sys.exit(1)
+
+    # Build filter set from CSV if provided
+    filter_set = None
+    if args.filter_csv:
+        fdf = pd.read_csv(args.filter_csv)
+        filter_set = set(zip(fdf["File"], fdf["Start Time (s)"].round(3)))
+        print(f"Filter CSV: {args.filter_csv}  ({len(filter_set)} windows)")
 
     print(f"NPZ root: {npz_root}")
     print(f"Output root: {output_root}")
@@ -153,6 +167,9 @@ def main():
 
         for start_frame, win in futils.windows_from_spectrogram(S, window_frames, stride_frames,
                                                           mel_start=mel_start, mel_end=mel_end):
+            start_sec = round(start_frame * secs_per_frame, 3)
+            if filter_set and (npz_path.name, start_sec) not in filter_set:
+                continue
             if args.pca_method == "mean_std":
                 feat = window_feature(win)
             else:
@@ -161,7 +178,7 @@ def main():
             window_meta.append({
                 "file": npz_path.name,
                 "start_frame": int(start_frame),
-                "start_sec": round(start_frame * secs_per_frame, 3),
+                "start_sec": start_sec,
             })
 
     if not feature_rows:

@@ -196,41 +196,58 @@ def plot_elbow(X_norm, max_k, seed, n_init, save_path):
 
 
 def save_cluster_grid(cluster_df, cluster_id, npz_root, window_frames, spec_cfg,
-                      save_path, mel_start=None, mel_end=None, max_samples=20):
+                      save_path, mel_start=None, mel_end=None, page_size=30):
+    """Save all windows in a cluster as paginated spectrogram grids.
+
+    Single page  → spectrogram_grid.png
+    Multiple pages → spectrogram_grid_1.png, spectrogram_grid_2.png, …
+    """
     n = len(cluster_df)
     if n == 0:
         return
-    sample_df = cluster_df.sort_values("Distance", ascending=False).head(max_samples)
-    n_show    = len(sample_df)
-    n_cols    = min(4, n_show)
-    n_rows    = (n_show + n_cols - 1) // n_cols
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows))
-    axes = np.atleast_1d(np.array(axes)).flatten()
+    save_path  = Path(save_path)
+    sorted_df  = cluster_df.sort_values("Distance", ascending=False)
+    n_pages    = max(1, (n + page_size - 1) // page_size)
+    label      = "Noise" if cluster_id == -1 else f"Cluster {cluster_id}"
 
-    for i, (_, row) in enumerate(sample_df.iterrows()):
-        ax, t = axes[i], float(row["Start Time (s)"])
-        try:
-            w = futils.get_window(npz_root / row["File"], t, window_frames,
-                                  mel_start=mel_start, mel_end=mel_end, spec_cfg=spec_cfg)
-            ax.imshow(w, aspect="auto", origin="lower", cmap="viridis")
-            ax.set_title(f"{Path(row['File']).stem[:18]}\nt={t:.1f}s  d={row['Distance']:.2f}",
-                         fontsize=8)
-        except Exception as e:
-            ax.set_title(f"Error: {e}", fontsize=7)
-            ax.axis("off")
-        ax.set_xticks([])
-        ax.set_yticks([])
+    for page in range(n_pages):
+        page_df = sorted_df.iloc[page * page_size : (page + 1) * page_size]
+        n_show  = len(page_df)
+        n_cols  = min(6, n_show)
+        n_rows  = (n_show + n_cols - 1) // n_cols
 
-    for j in range(n_show, len(axes)):
-        axes[j].axis("off")
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows))
+        axes = np.atleast_1d(np.array(axes)).flatten()
 
-    label  = "Noise" if cluster_id == -1 else f"Cluster {cluster_id}"
-    suffix = f"  (showing {n_show}/{n})" if n > max_samples else f"  ({n} windows)"
-    fig.suptitle(f"{label}{suffix}", fontsize=12, fontweight="bold")
-    plt.tight_layout()
-    plt.savefig(Path(save_path), dpi=150, bbox_inches="tight")
-    plt.close(fig)
+        for i, (_, row) in enumerate(page_df.iterrows()):
+            ax, t = axes[i], float(row["Start Time (s)"])
+            try:
+                w = futils.get_window(npz_root / row["File"], t, window_frames,
+                                      mel_start=mel_start, mel_end=mel_end, spec_cfg=spec_cfg)
+                ax.imshow(w, aspect="auto", origin="lower", cmap="viridis")
+                ax.set_title(f"{Path(row['File']).stem[:18]}\nt={t:.1f}s  d={row['Distance']:.2f}",
+                             fontsize=8)
+            except Exception as e:
+                ax.set_title(f"Error: {e}", fontsize=7)
+                ax.axis("off")
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        for j in range(n_show, len(axes)):
+            axes[j].axis("off")
+
+        if n_pages == 1:
+            title    = f"{label}  ({n} windows)"
+            out_path = save_path
+        else:
+            title    = f"{label}  (page {page + 1}/{n_pages}  ·  {n} windows total)"
+            out_path = save_path.parent / f"{save_path.stem}_{page + 1}{save_path.suffix}"
+
+        fig.suptitle(title, fontsize=12, fontweight="bold")
+        plt.tight_layout()
+        plt.savefig(out_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
 
 
 def plot_coassociation_heatmap(C: np.ndarray, labels: np.ndarray, save_path):

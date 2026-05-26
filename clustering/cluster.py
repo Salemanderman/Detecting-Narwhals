@@ -24,10 +24,12 @@ Usage:
 """
 
 import argparse
+import json
 import sys
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from tqdm import tqdm
 from sklearn.preprocessing import StandardScaler
 
 CLUSTER_DIR = Path(__file__).resolve().parent
@@ -40,7 +42,7 @@ from clustering_core  import (NEEDS_K, compute_distances,
                                run_clustering, compute_metrics, compute_validation_recall)
 from clustering_plots import (plot_clusters, plot_cluster_sizes, plot_silhouette,
                                plot_distance_boxplot, plot_recorder_distribution,
-                               plot_validation_recall, plot_elbow, save_cluster_grid)
+                               plot_validation_recall, save_cluster_grid)
 
 
 def main():
@@ -56,20 +58,20 @@ def main():
                     help="Spectrogram .npz directory (needed for grids and acoustic features)")
     # Algorithm
     ap.add_argument("--algorithm",   default="kmeans",
-                    choices=["kmeans", "gmm", "agglomerative", "hdbscan", "optics"])
+                    choices=["kmeans", "gmm", "agglomerative", "hdbscan", "optics", "dpmm"])
     ap.add_argument("--n-clusters",  type=int, default=5)
     ap.add_argument("--cluster-dims", type=int, default=10,
                     help="PCA dimensions to use for clustering (default: 10)")
-    ap.add_argument("--n-init",       type=int, default=10, help="k-means restarts")
     ap.add_argument("--seed",         type=int, default=42)
-    ap.add_argument("--min-cluster-size", type=int, default=10)
-    ap.add_argument("--min-samples",      type=int, default=None)
-    # All-windows mode extras
-    ap.add_argument("--distance-metric", choices=["euclidean", "mahalanobis"],
-                    default="euclidean",
-                    help="Distance metric when loading all windows (default: euclidean)")
-    ap.add_argument("--grid-samples", type=int, default=20,
-                    help="Max spectrogram thumbnails per cluster (default: 20)")
+    ap.add_argument("--min-cluster-size",    type=int,   default=10)
+    ap.add_argument("--min-samples",         type=int,   default=None)
+    ap.add_argument("--dpmm-max-components", type=int,   default=20,
+                    help="DPMM upper bound on clusters (default: 20, unused ones shrink to 0)")
+    ap.add_argument("--dpmm-concentration",  type=float, default=0.01,
+                    help="DPMM concentration parameter α (lower = fewer clusters, default: 0.01)")
+    # Spectrogram grids
+    ap.add_argument("--page-size", type=int, default=30,
+                    help="Spectrograms per grid page — all windows are saved across as many pages as needed (default: 30)")
     # Spectrogram
     ap.add_argument("--mel-start",   type=int,   default=None)
     ap.add_argument("--mel-end",     type=int,   default=None)
@@ -78,13 +80,13 @@ def main():
     ap.add_argument("--validation-csv", default=None,
                     help="validatedChristerCalls.csv for per-cluster recall")
     ap.add_argument("--tolerance",   type=float, default=5.0)
-    # Elbow
-    ap.add_argument("--elbow-max-k", type=int, default=None)
     ap.add_argument("--no-plot", action="store_true", default=False)
     args = ap.parse_args()
 
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
+    with open(output_root / "run_config.json", "w") as f:
+        json.dump(vars(args), f, indent=2)
 
     # ── Load PCA ────────────────────────────────────────────────────────────
     pca_file = Path(args.pca_root) / "pca_results.npz"
@@ -99,7 +101,7 @@ def main():
         if "Index" not in df.columns:
             raise ValueError("outliers.csv must have an 'Index' column.")
         indices = df["Index"].to_numpy(dtype=int)
-        out_csv = "outliers_clustered.csv"
+        out_csv = "clusters.csv"
         mode    = "outliers"
         print(f"Mode: outliers ({len(df)} windows from {args.outliers_csv})")
     else:
@@ -107,8 +109,7 @@ def main():
         window_secs   = pca_data["window_start_secs"].astype(float)
         window_frames = pca_data["window_start_frames"].astype(int)
         indices = np.arange(len(X_pca))
-        print(f"Computing {args.distance_metric} distances for {len(X_pca)} windows...")
-        distances = compute_distances(X_pca, args.distance_metric)
+        distances = compute_distances(X_pca, "euclidean")
         df = pd.DataFrame({
             "File":           window_files,
             "Start Frame":    window_frames,
@@ -117,12 +118,12 @@ def main():
             "PC2":            X_pca[:, 1] if X_pca.shape[1] > 1 else 0.0,
             "Distance":       distances,
         })
-        out_csv = "all_windows_clustered.csv"
+        out_csv = "clusters.csv"
         mode    = "all_windows"
         print(f"Mode: all windows ({len(df)} windows from pca_results.npz)")
 
     n = len(df)
-    if args.algorithm in NEEDS_K and n < args.n_clusters:
+    if args.algorithm in NEEDS_K and args.algorithm != "dpmm" and n < args.n_clusters:
         raise ValueError(f"Fewer windows ({n}) than clusters ({args.n_clusters}).")
 
     # ── Build feature matrix ─────────────────────────────────────────────────
@@ -131,15 +132,6 @@ def main():
     feature_desc = f"pca({dims})"
 
     X_norm = StandardScaler().fit_transform(X_feat)
-
-    # ── Elbow search (before clustering) ────────────────────────────────────
-    if args.elbow_max_k and args.algorithm == "kmeans":
-        print(f"\nElbow search k=2..{args.elbow_max_k}...")
-        plot_elbow(X_norm, args.elbow_max_k, args.seed, args.n_init,
-                   output_root / "elbow.png")
-        if args.no_plot:
-            print("Elbow saved. Exiting (--no-plot, clustering skipped).")
-            return
 
     # ── Cluster ──────────────────────────────────────────────────────────────
     print(f"\nClustering {n} windows  features={feature_desc}  algorithm={args.algorithm}  k={args.n_clusters}")
@@ -209,8 +201,7 @@ def main():
             spec_cfg  = configs.get_specgram_config()
             wf_frames = max(1, round(args.window_secs * spec_cfg["sample_rate"] / spec_cfg["hop_length"]))
             all_labels = list(range(k)) + ([-1] if n_noise else [])
-            print(f"\nSaving spectrogram grids ({args.grid_samples} samples per cluster)...")
-            from tqdm import tqdm
+            print(f"\nSaving spectrogram grids ({args.page_size} per page)...")
             for j in tqdm(all_labels, desc="Saving grids", unit="cluster"):
                 label       = "noise" if j == -1 else f"cluster_{j}"
                 cluster_dir = output_root / label
@@ -220,7 +211,7 @@ def main():
                     j, npz_root, wf_frames, spec_cfg,
                     cluster_dir / "spectrogram_grid.png",
                     mel_start=args.mel_start, mel_end=args.mel_end,
-                    max_samples=args.grid_samples,
+                    page_size=args.page_size,
                 )
 
     print(f"\n[done] {output_root}")
