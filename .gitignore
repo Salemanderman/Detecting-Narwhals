@@ -24,7 +24,10 @@
 !analysis/plot_spectrogram_windows.py
 !analysis/towsey_walkthrough.ipynb
 !analysis/autoencoder_anomaly_detection.ipynb
+!analysis/autoencoder_results/
 !analysis/autoencoder_results/evaluation_set
+!analysis/autoencoder_results/towsey_n0.5/
+!analysis/autoencoder_results/towsey_n0.5/evaluation_set.csv
 !analysis/calculate_mean_values_spectrogram.ipynb
 !analysis/autoencoder_results/towsey_n0.5/evaluation_set
 
