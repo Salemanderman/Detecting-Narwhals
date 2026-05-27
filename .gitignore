@@ -26,6 +26,7 @@
 !analysis/autoencoder_anomaly_detection.ipynb
 !analysis/autoencoder_results/evaluation_set
 !analysis/calculate_mean_values_spectrogram.ipynb
+!analysis/autoencoder_results/towsey_n0.5/evaluation_set
 
 !evaluation
 !evaluation/validatedChristerCalls.csv
