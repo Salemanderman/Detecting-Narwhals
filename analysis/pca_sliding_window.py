@@ -37,10 +37,12 @@ from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "clustering"))
 
 import utilities.configs as configs
 import utilities.feature_utils as futils
 import utilities.plot_utils as putils
+from clustering_core import mfcc_features
 
 
 # Helper functions:
@@ -105,13 +107,14 @@ def main():
     ap.add_argument("--stride-secs", type=float, default=None, help="Stride between consecutive windows in seconds. (Default: non-overlapping).")
     ap.add_argument("--mel-start", type=int,   default=0, help="First mel bin to include (default: 0).")
     ap.add_argument("--mel-end", type=int, default=None,  help="Last mel bin to include (exclusive). If not provided, uses all bins (default: all).")
-    ap.add_argument("--n-components", type=int, default=50, help="Number of PCA components to keep.")
+    ap.add_argument("--n-components", type=int, default=42, help="Number of PCA components to keep.")
     ap.add_argument("--n-mels", type=_int_or_none, default=None, help="Total mel bins in the NPZ files (default: auto-detect from first file).")
     ap.add_argument("--feature-key", default="feature", help="Key inside NPZ files (default: 'feature').")
     ap.add_argument("--single-file", default=None, help="Process only a specific file. Provide name of that file.")
     ap.add_argument("--batch-size", type=int, default=2048, help="Batch size for IncrementalPCA fitting (default: 2048).")
     ap.add_argument("--no-plot", action="store_true", help="Skip saving plots.")
-    ap.add_argument("--pca-method", choices=["mean_std", "full_window"], default="mean_std", help="Feature type for PCA.")
+    ap.add_argument("--pca-method", choices=["mean_std", "full_window", "mfcc"], default="mean_std", help="Feature type for PCA.")
+    ap.add_argument("--n-mfcc", type=int, default=20, help="Number of MFCC coefficients (only used when --pca-method mfcc, default: 20).")
     ap.add_argument("--filter-csv", default=None,
                     help="Only embed windows listed in this CSV (File + Start Time (s)). "
                          "Used for iterative clustering on a subset.")
@@ -193,10 +196,12 @@ def main():
             start_sec = round(start_frame * secs_per_frame, 3)
             if filter_set and (npz_path.name, start_sec) not in filter_set:
                 continue
-            if args.pca_method == "mean_std":
-                feat = window_feature(win)
-            else:
+            if args.pca_method == "mfcc":
+                feat = mfcc_features(win, n_mfcc=args.n_mfcc)
+            elif args.pca_method == "full_window":
                 feat = window_feature_full(win)
+            else:
+                feat = window_feature(win)
             feature_rows.append(feat)
             window_meta.append({
                 "file": npz_path.name,

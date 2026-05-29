@@ -278,7 +278,7 @@ def run_reduction(filter_csv: Path, out: Path, args, plot: bool = False) -> bool
             cmd += ['--mel-end', str(args.mel_end)]
     else:
         cmd = [
-            sys.executable, str(ROOT / 'analysis' / 'umap_experiment.py'),
+            sys.executable, str(ROOT / 'analysis' / 'umap_embedding.py'),
             '--npz-root',    str(args.npz_root),
             '--output-root', str(out),
             '--window-secs', str(args.window_secs),

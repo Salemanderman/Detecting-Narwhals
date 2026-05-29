@@ -41,11 +41,18 @@ def get_pipeline_config():
         window_secs=5.0,
         stride_secs=3.0,
         mel_start=9,
+        mel_end=None,   # None = all bins
         n_mels=128,
 
-        # PCA parameters
+        # Reduction parameters (shared)
+        reduction="pca",        # "pca" or "umap"
         n_components=42,
-        pca_method="mean_std",
+        # PCA-specific
+        pca_method="mean_std",  # "mean_std" | "full_window" | "mfcc"
+        # UMAP-specific
+        feature_mode="mfcc",    # "mean_std" | "mfcc" | "extended_acoustic" | "passthrough"
+        umap_n_neighbors=15,
+        umap_min_dist=0.1,
 
         # Outlier detection parameters
         distance_metric="mahalanobis",

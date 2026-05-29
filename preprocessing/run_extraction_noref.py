@@ -43,6 +43,9 @@ def _filter_by_length(dataset, start_secs, target_sr=64_000):
         remaining = total - int(start_secs * target_sr)
         lengths[str(p)] = max(0, round(remaining / target_sr) - 1) * target_sr  # same as AudioDataset
 
+    if not lengths:
+        raise RuntimeError(f"No audio files found under {base.root_dir}")
+
     mode_len = Counter(lengths.values()).most_common(1)[0][0]
     valid = {p for p, l in lengths.items() if l == mode_len}
     n_skipped = len(files) - len(valid)
