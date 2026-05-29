@@ -88,24 +88,18 @@ def towsey_noise_removal(
     return result
 
 
-# Dataloader built based on PyTorch tutorial.
-# Uses helper max_len_collate().
 class AudioDataset(Dataset):
-    """Audio dataset class suited for the hydroacoustic dataset from Inglefield Bredning Fjord, 
-    Greenland. Returns a dictionary with keys: "waveform", "sample_rate", "path".
-    When called with helper function max_len_collate(), the final output batch contains: 
-            "waves": torch.Tensor of shape [C, T].
-            "sample_rates": int.
-            "paths": str, path to the audio file.
-            "lengths": int, original length of each waveform before padding.
+    """Audio dataset for hydroacoustic recordings from Inglefield Bredning Fjord, Greenland.
+    Returns a dict with keys "waveform" (C, T), "sample_rate" (int), "path" (str).
+    All files are cropped to the same length via start_secs + crop_end_secs snapping,
+    so batches can be stacked without padding using the default DataLoader collate.
     """
-    def __init__(self, root_dir, target_sr=64000, start_secs=5, end_secs=None):
+    def __init__(self, root_dir, target_sr=64000, start_secs=5, crop_end_secs=5):
         self.root_dir = Path(root_dir) # Root data folder.
         self.files = list(self.root_dir.rglob("*.wav")) # Searches for pattern in subfolders.
         self.target_sr = target_sr # Can change from original raw 64 kHz to common 16 kHz.
-        self.start_secs = start_secs # Skip a recording's first corrupted seconds.
-        # self.max_frames = int(target_sr * max_secs) if max_secs else None # Truncation for plotting.
-        self.end_secs = end_secs
+        self.start_secs = start_secs
+        self.crop_end_secs = crop_end_secs
 
     def __len__(self):
         return len(self.files)
@@ -117,10 +111,10 @@ class AudioDataset(Dataset):
         # T (the number of frames) is approximately = 172 million,
         # and is recorded at sample rate = 64 kHz.
         
-        # Skip corrupted beginning of every recording.
-        s_idx = int(self.start_secs * sr)
-        e_idx = int(self.end_secs * sr) if self.end_secs is not None else wf.shape[-1]
-        e_idx = max(s_idx, min(e_idx, wf.shape[-1])) 
+        s_idx  = int(self.start_secs * sr)
+        snap   = int(self.crop_end_secs * sr)
+        dur    = ((wf.shape[-1] - s_idx) // snap) * snap
+        e_idx  = s_idx + dur
 
         wf = wf[:, s_idx:e_idx] if e_idx > s_idx else torch.zeros((wf.shape[0], 1))
 
@@ -132,34 +126,12 @@ class AudioDataset(Dataset):
 
         return item
 
-# Collates tensors in a batch by padding to the max length tensor.
-def max_len_collate(batch):
-    waves = [b["waveform"] for b in batch] # List of [C, T] tensors.
-    C = waves[0].shape[0]
-    max_len = max([w.shape[-1] for w in waves])
-    padded = []
-    lengths = []
-    for w in waves:
-        pad_T = max_len - w.shape[-1]
-        padded.append(F.pad(w, (0, pad_T))) # Pad last dimension.
-        lengths.append(w.shape[-1])
-    waves = torch.stack(padded) # [B, C, T]
-
-    output = {
-        "waveforms": waves,
-        "sample_rates": [b["sample_rate"] for b in batch], # All sample rates are the same.
-        "paths": [b["path"] for b in batch],
-        "lengths": torch.tensor(lengths), # Keep original lengths for later data processing.
-    }
-    return output 
 
 # A preprocessing pipeline class for audio features. Inherits methods "eval" and "train"
 # from torch.nn.Module.
 class PipelineSpecgram(torch.nn.Module):
     def __init__(self, specgram_config:dict):
         super().__init__()
-        self.use_towsey = specgram_config.get("use_towsey", False)
-        self.towsey_N = specgram_config.get("towsey_N", 0.0)
         # Basic spectrogram settings.
         self.sample_rate = specgram_config["sample_rate"]
         self.n_fft = specgram_config["n_fft"]
@@ -210,26 +182,15 @@ class PipelineSpecgram(torch.nn.Module):
         else:
             self.mel_scale = None 
     
-    def _apply_towsey(self, S: torch.Tensor) -> torch.Tensor:
-        """Apply Towsey (2013) noise removal to a spectrogram (1, bins, T), return (1, bins, T)."""
-        S_np = S.squeeze(0).cpu().numpy()
-        S_clean = towsey_noise_removal(S_np, N=self.towsey_N)
-        return torch.from_numpy(S_clean).unsqueeze(0).to(S.device)
-
     def forward(self, waveform: torch.Tensor) -> torch.Tensor:
         x = self.resample(waveform)
-        spec = self.spec(x)  # (1, F, T) power spectrogram
+        spec = self.spec(x)  # (..., F, T) power spectrogram
 
         if self.mel_scale is not None:
-            mel = self.mel_scale(spec)  # (1, M, T)
-            out = self.to_db(mel / (1e-6**2))
+            mel = self.mel_scale(spec)  # (..., M, T)
+            return self.to_db(mel / (1e-6**2))
         else:
-            out = self.to_db(spec / (1e-6**2))
-
-        if self.use_towsey:
-            out = self._apply_towsey(out)
-
-        return out
+            return self.to_db(spec / (1e-6**2))
 
 # Helper function to reduce the number of sample points in audio data tensors.
 def reduce_tensor(w, max_pts):
