@@ -32,24 +32,23 @@ def _get_base_files(dataset):
     return dataset, dataset.files
 
 
-def _filter_by_length(dataset, start_secs, crop_end_secs, target_sr=64_000):
-    """Keep only files whose snapped duration matches the most common length."""
+def _filter_by_length(dataset, start_secs, target_sr=64_000):
+    """Keep only files whose 1-second-snapped duration matches the most common length."""
     base, files = _get_base_files(dataset)
 
-    snap = int(crop_end_secs * target_sr)
     lengths = {}
     for p in tqdm(files, desc="Scanning file lengths", unit="file", leave=False):
         info = torchaudio.info(str(p))
         total = int(info.num_frames / info.sample_rate * target_sr)
         remaining = total - int(start_secs * target_sr)
-        lengths[str(p)] = (max(0, remaining) // snap) * snap  # same logic as AudioDataset
+        lengths[str(p)] = max(0, round(remaining / target_sr) - 1) * target_sr  # same as AudioDataset
 
     mode_len = Counter(lengths.values()).most_common(1)[0][0]
     valid = {p for p, l in lengths.items() if l == mode_len}
     n_skipped = len(files) - len(valid)
     if n_skipped:
         print(f"[info] Skipping {n_skipped} file(s) with unexpected length "
-              f"(expected {mode_len / target_sr:.0f} s after crop).")
+              f"(expected ~{mode_len / target_sr:.0f} s after crop).")
 
     valid_indices = [i for i, p in enumerate(base.files) if str(p) in valid]
     return Subset(base, valid_indices)
@@ -63,7 +62,6 @@ def main():
     ap.add_argument("--towsey", action="store_true", default=False, help="Apply Towsey (2013) modal noise removal after spectrogram computation.")
     ap.add_argument("--towsey-N", type=float, default=0.0, dest="towsey_N", help="Towsey N: std devs above modal background added to threshold (default 0.0).")
     ap.add_argument("--audio-crop-start-secs", type=int, default=5, dest="audio_crop_start_secs", help="Seconds to cut from the start of each recording (default: 5).")
-    ap.add_argument("--audio-crop-end-secs", type=int, default=5, dest="audio_crop_end_secs", help="Crop the end of each recording to the nearest multiple of this many seconds (default: 5).")
     ap.add_argument("--linear-freq", action="store_true", default=False, help="Use linear frequency scale instead of mel scale.")
     ap.add_argument("--n-mels", type=int, default=None, dest="n_mels", help="Number of mel bins (default: from config). Ignored if --linear-freq is set.")
     ap.add_argument("--num-workers", type=int, default=4, dest="num_workers", help="DataLoader worker processes (default: 4, use 0 on Windows if errors occur).")
@@ -74,10 +72,9 @@ def main():
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
-    start_secs     = args.audio_crop_start_secs
-    crop_end_secs = args.audio_crop_end_secs
-    batch_size     = args.batch_size
-    print(f" [info] cropping first {start_secs} s from start; cropping up to {crop_end_secs} s from end.")
+    start_secs = args.audio_crop_start_secs
+    batch_size = args.batch_size
+    print(f" [info] cropping first {start_secs} s from start; snapping end to 1-second boundary.")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Input:  {audio_root}")
@@ -85,10 +82,10 @@ def main():
     print(f"Device: {device}")
 
     # Build dataset, apply optional subset, then filter to standard-length files only
-    dataset = utils.AudioDataset(audio_root, target_sr=64_000, start_secs=start_secs, crop_end_secs=crop_end_secs)
+    dataset = utils.AudioDataset(audio_root, target_sr=64_000, start_secs=start_secs)
     if args.subset_len > 0:
         dataset = Subset(dataset, list(range(min(args.subset_len, len(dataset)))))
-    dataset = _filter_by_length(dataset, start_secs, crop_end_secs)
+    dataset = _filter_by_length(dataset, start_secs)
 
     # All files are now the same length — default collate stacks them without padding
     loader = DataLoader(dataset, batch_size=batch_size, num_workers=args.num_workers, shuffle=False)

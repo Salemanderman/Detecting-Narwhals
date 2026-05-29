@@ -91,15 +91,15 @@ def towsey_noise_removal(
 class AudioDataset(Dataset):
     """Audio dataset for hydroacoustic recordings from Inglefield Bredning Fjord, Greenland.
     Returns a dict with keys "waveform" (C, T), "sample_rate" (int), "path" (str).
-    All files are cropped to the same length via start_secs + crop_end_secs snapping,
-    so batches can be stacked without padding using the default DataLoader collate.
+    Crops start_secs from the start and snaps the end to 1-second boundaries, always
+    removing at least 1 second. Files within 1 second of the same length produce identical
+    sample counts, so batches stack without padding using the default DataLoader collate.
     """
-    def __init__(self, root_dir, target_sr=64000, start_secs=5, crop_end_secs=5):
+    def __init__(self, root_dir, target_sr=64000, start_secs=5):
         self.root_dir = Path(root_dir) # Root data folder.
         self.files = list(self.root_dir.rglob("*.wav")) # Searches for pattern in subfolders.
         self.target_sr = target_sr # Can change from original raw 64 kHz to common 16 kHz.
         self.start_secs = start_secs
-        self.crop_end_secs = crop_end_secs
 
     def __len__(self):
         return len(self.files)
@@ -112,8 +112,9 @@ class AudioDataset(Dataset):
         # and is recorded at sample rate = 64 kHz.
         
         s_idx  = int(self.start_secs * sr)
-        snap   = int(self.crop_end_secs * sr)
-        dur    = ((wf.shape[-1] - s_idx) // snap) * snap
+        # Round to nearest second then subtract 1: files within ±0.5 s of each other
+        # produce the same length, and at least 1 second is always removed from the end.
+        dur    = max(0, round((wf.shape[-1] - s_idx) / sr) - 1) * sr
         e_idx  = s_idx + dur
 
         wf = wf[:, s_idx:e_idx] if e_idx > s_idx else torch.zeros((wf.shape[0], 1))
