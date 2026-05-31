@@ -101,7 +101,7 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int) -> tuple[dict
         print(f"  {name}: {n} windows")
 
     print(f"\nLabels: [k]eep  [r]emove  or type name ({type_keys})")
-    print("Nav:    Enter=next  b=back  d=done  <number>=jump  n/p=page  ?=help\n")
+    print("Nav:    Enter=advance (keep)  b=back  d=done (keep rest)  <number>=jump  n/p=page  ?=help\n")
 
     labels: dict[int, str] = {}
     types:  dict[int, str] = {}
@@ -150,28 +150,22 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int) -> tuple[dict
                 continue
 
             elif raw == '?':
-                print("  k=keep  r=remove  Enter=skip/confirm current label")
+                print("  k=keep  r=remove  Enter=confirm/advance (default: keep)")
                 print(f"  type name = keep + tag: {type_keys}")
-                print("  b=back  d=done  n=next page  p=prev page  <number>=jump")
+                print("  b=back  d=done (keep rest)  n/p=page  <number>=jump")
 
             elif raw == 'b':
                 idx = max(0, idx - 1)
                 break
 
             elif raw == 'd':
-                for remaining in cluster_ids[idx:]:
-                    if remaining not in labels:
-                        labels[remaining] = 'skip'
                 idx = len(cluster_ids)
                 break
 
             elif raw == '':
                 if c in labels:
                     type_suffix = f": {types[c]}" if c in types else ""
-                    print(f"  keeping: {labels[c]}{type_suffix}")
-                else:
-                    labels[c] = 'skip'
-                    print("  skip")
+                    print(f"  {labels[c]}{type_suffix}")
                 idx += 1
                 break
 
@@ -205,25 +199,22 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int) -> tuple[dict
 
 def show_summary(labels: dict, types: dict, df: pd.DataFrame):
     cluster_ids = sorted(df['cluster'].unique())
-    print("\nLabel summary:")
-    for lbl in ['keep', 'skip', 'remove']:
-        cs = [c for c in cluster_ids if labels.get(c) == lbl]
-        if not cs:
-            continue
-        n_win = sum(int((df['cluster'] == c).sum()) for c in cs)
-        ids   = ', '.join(
-            ('Noise' if c == -1 else str(c)) + (f"={types[c]}" if c in types else "")
-            for c in cs
-        )
-        print(f"  {lbl}: {len(cs)} cluster(s), {n_win} windows  [{ids}]")
+    keep_ids   = [c for c in cluster_ids if labels.get(c) != 'remove']
+    remove_ids = [c for c in cluster_ids if labels.get(c) == 'remove']
+    n_keep     = sum(int((df['cluster'] == c).sum()) for c in keep_ids)
 
-    keep_ids = [c for c in cluster_ids if labels.get(c) != 'remove']
-    n_keep   = sum(int((df['cluster'] == c).sum()) for c in keep_ids)
-    typed    = [c for c in keep_ids if c in types]
-    if typed:
-        type_summary = '  '.join(f"{types[c]}×{int((df['cluster']==c).sum())}" for c in typed)
-        print(f"  types: {type_summary}")
-    print(f"  keeping {n_keep}/{len(df)} windows  ({len(df) - n_keep} removed)")
+    print("\nLabel summary:")
+    if remove_ids:
+        n_rem = sum(int((df['cluster'] == c).sum()) for c in remove_ids)
+        ids   = ', '.join('Noise' if c == -1 else str(c) for c in remove_ids)
+        print(f"  remove: {len(remove_ids)} cluster(s), {n_rem} windows  [{ids}]")
+    if keep_ids:
+        ids = ', '.join(
+            ('Noise' if c == -1 else str(c)) + (f"={types[c]}" if c in types else "")
+            for c in keep_ids
+        )
+        print(f"  keep:   {len(keep_ids)} cluster(s), {n_keep} windows  [{ids}]")
+    print(f"  → {n_keep}/{len(df)} windows pass to next pass")
 
 
 def save_type_annotations(df: pd.DataFrame, types: dict, csv_path: Path):
@@ -267,34 +258,45 @@ def _ask_strategy(current_algorithm: str) -> str | None:
         print(f"  use {'/'.join(STRATEGIES)} or Enter")
 
 
-def ask_action(min_cluster_size: int, algorithm: str = 'hdbscan') -> tuple[str, int, str | None]:
-    t = min_cluster_size + 3
-    l = max(3, min_cluster_size - 3)
-    print(f"\nWhat next?  (algorithm: {algorithm.upper()}  min_cluster_size={min_cluster_size})")
-    print(f"  [r] re-cluster  [t] tighter (mcs={t})  [l] looser (mcs={l})  [c] custom mcs")
+def ask_action(args) -> tuple[str, str | None]:
+    """Prompt for next action. Mutates args in-place for algorithm-specific parameter changes."""
+    if args.algorithm == 'hdbscan':
+        param, label, current = 'min_cluster_size', 'mcs', args.min_cluster_size
+    elif args.algorithm == 'kmeans':
+        param, label, current = 'n_clusters', 'k', args.n_clusters
+    else:  # dpmm
+        param, label, current = 'dpmm_max_components', 'max_comp', args.dpmm_max_components
+
+    t = current + 3
+    l = max(2, current - 3)
+
+    print(f"\nWhat next?  ({args.algorithm.upper()}  {label}={current})")
+    print(f"  [r] re-cluster  [t] tighter ({label}={t})  [l] looser ({label}={l})  [c] custom {label}")
     print(f"  [f] final (ensemble)  [s] save + exit  [q] quit")
     while True:
         raw = input("> ").strip().lower()
         if raw == 'r':
-            return 'recluster', min_cluster_size, _ask_strategy(algorithm)
+            return 'recluster', _ask_strategy(args.algorithm)
         elif raw == 't':
-            return 'recluster', t, _ask_strategy(algorithm)
+            setattr(args, param, t)
+            return 'recluster', _ask_strategy(args.algorithm)
         elif raw == 'l':
-            return 'recluster', l, _ask_strategy(algorithm)
+            setattr(args, param, l)
+            return 'recluster', _ask_strategy(args.algorithm)
         elif raw == 'c':
-            v = input(f"min_cluster_size [{min_cluster_size}]: ").strip()
+            v = input(f"{label} [{current}]: ").strip()
             try:
-                mcs = int(v) if v else min_cluster_size
+                setattr(args, param, int(v) if v else current)
             except ValueError:
                 print("  must be an integer")
                 continue
-            return 'recluster', mcs, _ask_strategy(algorithm)
+            return 'recluster', _ask_strategy(args.algorithm)
         elif raw == 'f':
-            return 'final', min_cluster_size, None
+            return 'final', None
         elif raw == 's':
-            return 'save', min_cluster_size, None
+            return 'save', None
         elif raw == 'q':
-            return 'quit', min_cluster_size, None
+            return 'quit', None
         else:
             print("  use r/t/l/c/f/s/q")
 
@@ -455,14 +457,12 @@ def main():
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
-    min_cluster_size = args.min_cluster_size
-
     print(f"output: {output_root}")
     print(f"npz:    {args.npz_root}")
 
     init_clusters_dir = output_root / "clusters_init"
-    print(f"\nRunning initial clustering ({args.algorithm}, mcs={min_cluster_size})...")
-    if not run_cluster_step(Path(args.pca_root), init_clusters_dir, min_cluster_size, args):
+    print(f"\nRunning initial clustering ({args.algorithm}, mcs={args.min_cluster_size})...")
+    if not run_cluster_step(Path(args.pca_root), init_clusters_dir, args.min_cluster_size, args):
         print("[error] Initial clustering failed.")
         sys.exit(1)
     current_clusters_dir = init_clusters_dir
@@ -496,8 +496,7 @@ def main():
         # Save type annotations to central CSV
         save_type_annotations(df, types, Path(args.type_annotations_csv))
 
-        # Decide action
-        action, min_cluster_size, strategy_key = ask_action(min_cluster_size, args.algorithm)
+        action, strategy_key = ask_action(args)
         if strategy_key:
             s = STRATEGIES[strategy_key]
             args.reduction    = s['reduction']
@@ -539,8 +538,8 @@ def main():
             current_clusters_dir = ensemble_dir
         else:
             cluster_dir = pass_dir / 'clusters'
-            print(f"\nClustering ({args.algorithm}, mcs={min_cluster_size})...")
-            if not run_cluster_step(reduction_dir, cluster_dir, min_cluster_size, args):
+            print(f"\nClustering ({args.algorithm}, mcs={args.min_cluster_size})...")
+            if not run_cluster_step(reduction_dir, cluster_dir, args.min_cluster_size, args):
                 print("[error] Clustering step failed")
                 sys.exit(1)
             current_clusters_dir = cluster_dir
