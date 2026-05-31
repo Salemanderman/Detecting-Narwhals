@@ -1,36 +1,17 @@
 """
-Interactive cluster review tool — iterative narwhal call clustering for biologists.
-
-Shows each cluster's spectrogram grid, lets you label it, then offers to re-cluster
-(UMAP re-embed + HDBSCAN) on the cleaned subset, or run final ensemble clustering.
-All passes are saved under output-root/pass_N/ so nothing is lost.
+Interactive iterative cluster review for narwhal call detection.
 
 Usage:
-    # Start with DPMM strategy (PCA + MFCC + DPMM):
     python clustering/interactive_cluster_review.py \
         --pca-root    output/mixedDataset/melBins/towsey/pca_mfcc \
         --npz-root    output/mixedDataset/melBins/towsey/npz \
         --output-root output/iterative_review \
-        --strategy d \
-        --mel-start 11 --mel-end 128
+        --strategy d --mel-start 11 --mel-end 128
 
-    # Start with HDBSCAN strategy (UMAP + MFCC + HDBSCAN):
-    python clustering/interactive_cluster_review.py \
-        --pca-root    output/mixedDataset/melBins/towsey/pca_mfcc \
-        --npz-root    output/mixedDataset/melBins/towsey/npz \
-        --output-root output/iterative_review \
-        --strategy h
-
-Strategies (--strategy / switchable per pass in-session):
+Strategies (--strategy, also switchable per pass):
   h = UMAP + MFCC + HDBSCAN
   d = PCA  + MFCC + DPMM
   k = PCA  + MFCC + KMeans
-
-After labelling all clusters, choose what to do next:
-  r/t/l/c = re-cluster (prompts for strategy)
-  f = final ensemble clustering
-  s = save filtered CSV and exit
-  q = quit
 """
 
 import argparse
@@ -40,7 +21,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -51,7 +31,6 @@ LABEL_MAP = {
     'k': 'keep',
     'r': 'remove',
 }
-REMOVE_LABELS = {'remove'}
 
 # Named clustering strategies — shown in the ask_action() sub-prompt.
 # Each entry sets the reduction method, feature mode, and clustering algorithm.
@@ -70,20 +49,11 @@ STRATEGIES = {
 TYPE_MAP = {
     'clicks':  'clicks',
     'tonal':   'tonal',
-    'burst':   'burst-pulse',
     'noise':   'noise',
     'ice':     'ice-noise',
-    'mixed':   'mixed',
 }
 # These types are tagged in the annotations CSV but removed from the iterative pipeline.
 REMOVE_TYPES = {'noise', 'ice'}
-
-
-# ── Display helpers ───────────────────────────────────────────────────────────
-
-def bar(n, total, width=20):
-    filled = round(width * n / max(total, 1))
-    return '█' * filled + '░' * (width - filled)
 
 
 def open_image(path: Path):
@@ -112,8 +82,6 @@ def grid_paths(clusters_dir: Path, cluster_id: int) -> list[Path]:
     return pages
 
 
-# ── Load clusters CSV ─────────────────────────────────────────────────────────
-
 def load_clusters_csv(clusters_dir: Path) -> pd.DataFrame:
     p = clusters_dir / "clusters.csv"
     if not p.exists():
@@ -121,38 +89,19 @@ def load_clusters_csv(clusters_dir: Path) -> pd.DataFrame:
     return pd.read_csv(p)
 
 
-# ── Per-pass interactive review ───────────────────────────────────────────────
-
-def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
-                cluster_preds: dict = None) -> tuple[dict, dict]:
-    """
-    Walk through each cluster interactively.
-    Returns (labels, types) where:
-      labels: {cluster_id: 'keep'|'remove'|'skip'}
-      types:  {cluster_id: canonical_type_string}  — only for typed clusters
-    cluster_preds: optional {cluster_id: {label, confidence, detail}} from classifier.
-    Navigation: sequential by default, type a cluster number to jump, b=back, d=done.
-    """
-    cluster_preds = cluster_preds or {}
+def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int) -> tuple[dict, dict]:
     cluster_ids = sorted(df['cluster'].unique())
     n_total     = len(df)
-    type_keys   = '  /  '.join(TYPE_MAP.keys())
+    type_keys   = ' / '.join(TYPE_MAP.keys())
 
-    print(f"\n{'═'*62}")
-    print(f"  Pass {pass_n}  ·  {len(cluster_ids)} clusters  ·  {n_total} windows")
-    print(f"{'═'*62}")
-
-    # Overview table
-    print()
+    print(f"\nPass {pass_n}  —  {len(cluster_ids)} clusters  {n_total} windows")
     for c in cluster_ids:
         n    = len(df[df['cluster'] == c])
-        name = "Noise   " if c == -1 else f"Cluster {c:3d}"
-        print(f"  {name}: {n:5d} windows  {bar(n, n_total)}")
+        name = "Noise" if c == -1 else f"Cluster {c}"
+        print(f"  {name}: {n} windows")
 
-    print()
-    print(f"  Labels : [k]eep  [r]emove  or a type name (keeps + tags): {type_keys}")
-    print(f"  Nav    : Enter=next  b=back  d=done(skip rest)  <number>=jump  n/p=next/prev page  [?] help")
-    print()
+    print(f"\nLabels: [k]eep  [r]emove  or type name ({type_keys})")
+    print("Nav:    Enter=next  b=back  d=done  <number>=jump  n/p=page  ?=help\n")
 
     labels: dict[int, str] = {}
     types:  dict[int, str] = {}
@@ -169,12 +118,7 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
         else:
             current = ""
         name = "Noise" if c == -1 else f"Cluster {c}"
-        print(f"{'─'*62}")
-        print(f"  [{pos}] {name} — {n} windows{current}")
-        if c in cluster_preds:
-            p = cluster_preds[c]
-            print(f"  Model → {p['label']}  conf={p['confidence']:.0%}  {p['detail']}")
-
+        print(f"[{pos}] {name} — {n} windows{current}")
         pages    = grid_paths(clusters_dir, c)
         page_idx = 0
         if pages:
@@ -191,25 +135,24 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
                 if len(pages) > 1:
                     page_idx = (page_idx + 1) % len(pages)
                     open_image(pages[page_idx])
-                    print(f"  Page {page_idx + 1}/{len(pages)}")
+                    print(f"  page {page_idx + 1}/{len(pages)}")
                 else:
-                    print("  Only one page.")
+                    print("  only one page")
                 continue
 
             elif raw == 'p':
                 if len(pages) > 1:
                     page_idx = (page_idx - 1) % len(pages)
                     open_image(pages[page_idx])
-                    print(f"  Page {page_idx + 1}/{len(pages)}")
+                    print(f"  page {page_idx + 1}/{len(pages)}")
                 else:
-                    print("  Only one page.")
+                    print("  only one page")
                 continue
 
             elif raw == '?':
-                print("    k=keep  r=remove  Enter=skip/confirm current label")
-                print(f"    type name = keep + tag: {type_keys}")
-                print("    b=back to previous  d=done (skip all remaining unlabeled)")
-                print("    n=next page  p=prev page  <number>=jump to that cluster")
+                print("  k=keep  r=remove  Enter=skip/confirm current label")
+                print(f"  type name = keep + tag: {type_keys}")
+                print("  b=back  d=done  n=next page  p=prev page  <number>=jump")
 
             elif raw == 'b':
                 idx = max(0, idx - 1)
@@ -225,16 +168,16 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
             elif raw == '':
                 if c in labels:
                     type_suffix = f": {types[c]}" if c in types else ""
-                    print(f"    keeping: {labels[c]}{type_suffix}")
+                    print(f"  keeping: {labels[c]}{type_suffix}")
                 else:
                     labels[c] = 'skip'
-                    print("    → skip")
+                    print("  skip")
                 idx += 1
                 break
 
             elif raw in LABEL_MAP:
                 labels[c] = LABEL_MAP[raw]
-                print(f"    → {LABEL_MAP[raw]}")
+                print(f"  {LABEL_MAP[raw]}")
                 idx += 1
                 break
 
@@ -242,7 +185,7 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
                 action    = 'remove' if raw in REMOVE_TYPES else 'keep'
                 labels[c] = action
                 types[c]  = TYPE_MAP[raw]
-                print(f"    → {action}  [type: {TYPE_MAP[raw]}]")
+                print(f"  {action}  [{TYPE_MAP[raw]}]")
                 idx += 1
                 break
 
@@ -252,20 +195,17 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
                     idx = cluster_ids.index(target)
                     break
                 else:
-                    print(f"    Cluster {target} not in this pass. Available: {cluster_ids}")
+                    print(f"  cluster {target} not found. Available: {cluster_ids}")
 
             else:
-                print(f"    Unknown input '{raw}'. Type ? for help.")
+                print(f"  unknown: '{raw}'. Type ? for help.")
 
     return labels, types
 
 
-# ── Summary after review ──────────────────────────────────────────────────────
-
 def show_summary(labels: dict, types: dict, df: pd.DataFrame):
     cluster_ids = sorted(df['cluster'].unique())
-    print(f"\n{'═'*62}")
-    print("  Label summary:")
+    print("\nLabel summary:")
     for lbl in ['keep', 'skip', 'remove']:
         cs = [c for c in cluster_ids if labels.get(c) == lbl]
         if not cs:
@@ -275,18 +215,16 @@ def show_summary(labels: dict, types: dict, df: pd.DataFrame):
             ('Noise' if c == -1 else str(c)) + (f"={types[c]}" if c in types else "")
             for c in cs
         )
-        print(f"  {lbl:12s}: {len(cs):2d} cluster(s)  ({n_win:5d} windows)  [{ids}]")
+        print(f"  {lbl}: {len(cs)} cluster(s), {n_win} windows  [{ids}]")
 
-    keep_ids = [c for c in cluster_ids if labels.get(c) not in REMOVE_LABELS]
+    keep_ids = [c for c in cluster_ids if labels.get(c) != 'remove']
     n_keep   = sum(int((df['cluster'] == c).sum()) for c in keep_ids)
     typed    = [c for c in keep_ids if c in types]
     if typed:
         type_summary = '  '.join(f"{types[c]}×{int((df['cluster']==c).sum())}" for c in typed)
-        print(f"  Types       : {type_summary}")
-    print(f"\n  Keeping {n_keep}/{len(df)} windows  ({len(df) - n_keep} removed)")
+        print(f"  types: {type_summary}")
+    print(f"  keeping {n_keep}/{len(df)} windows  ({len(df) - n_keep} removed)")
 
-
-# ── Type annotation persistence ──────────────────────────────────────────────
 
 def save_type_annotations(df: pd.DataFrame, types: dict, csv_path: Path):
     """
@@ -298,10 +236,9 @@ def save_type_annotations(df: pd.DataFrame, types: dict, csv_path: Path):
     if not typed_clusters:
         return
 
-    new_rows = df[df['cluster'].isin(typed_clusters)][['File', 'Start Time (s)']].copy()
-    new_rows['type'] = new_rows.apply(
-        lambda r: types[int(df.loc[r.name, 'cluster'])], axis=1
-    )
+    new_rows = df[df['cluster'].isin(typed_clusters)][['File', 'Start Time (s)', 'cluster']].copy()
+    new_rows['type'] = new_rows['cluster'].map(types)
+    new_rows = new_rows.drop(columns=['cluster'])
 
     if csv_path.exists():
         existing = pd.read_csv(csv_path)
@@ -312,17 +249,14 @@ def save_type_annotations(df: pd.DataFrame, types: dict, csv_path: Path):
 
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     merged.to_csv(csv_path, index=False)
-    print(f"\n  [type annotations saved → {csv_path}  ({len(new_rows)} new/updated rows, {len(merged)} total)]")
+    print(f"  [annotations saved → {csv_path}  ({len(new_rows)} new rows, {len(merged)} total)]")
 
-
-# ── Next action prompt ────────────────────────────────────────────────────────
 
 def _ask_strategy(current_algorithm: str) -> str | None:
-    """Sub-prompt shown after a recluster action. Returns a STRATEGIES key or None to keep current."""
-    current_key = next((k for k, v in STRATEGIES.items() if v['algorithm'] == current_algorithm), '?')
+    current_key  = next((k for k, v in STRATEGIES.items() if v['algorithm'] == current_algorithm), '?')
     current_desc = STRATEGIES.get(current_key, {}).get('desc', current_algorithm)
     strat_lines  = '  '.join(f"[{k}] {v['desc']}" for k, v in STRATEGIES.items())
-    print(f"\n  Strategy  (current: {current_desc})")
+    print(f"  strategy (current: {current_desc})")
     print(f"  {strat_lines}  [Enter] keep current")
     while True:
         raw = input("  > ").strip().lower()
@@ -330,24 +264,17 @@ def _ask_strategy(current_algorithm: str) -> str | None:
             return None
         if raw in STRATEGIES:
             return raw
-        print(f"  Use {'/'.join(STRATEGIES)} or Enter to keep current.")
+        print(f"  use {'/'.join(STRATEGIES)} or Enter")
 
 
 def ask_action(min_cluster_size: int, algorithm: str = 'hdbscan') -> tuple[str, int, str | None]:
     t = min_cluster_size + 3
     l = max(3, min_cluster_size - 3)
-    print(f"\n{'═'*62}")
-    print("  What next?")
-    print(f"  [r] Re-cluster   re-embed + {algorithm.upper()}  min_cluster_size={min_cluster_size}")
-    print(f"  [t] Tighter      same, but min_cluster_size={t}")
-    print(f"  [l] Looser       same, but min_cluster_size={l}")
-    print(f"  [c] Custom       enter a specific min_cluster_size")
-    print(f"  [f] Final        ensemble clustering on remaining windows")
-    print(f"  [s] Save         write filtered windows CSV and exit")
-    print(f"  [q] Quit         exit without saving")
-    print(f"{'═'*62}")
+    print(f"\nWhat next?  (algorithm: {algorithm.upper()}  min_cluster_size={min_cluster_size})")
+    print(f"  [r] re-cluster  [t] tighter (mcs={t})  [l] looser (mcs={l})  [c] custom mcs")
+    print(f"  [f] final (ensemble)  [s] save + exit  [q] quit")
     while True:
-        raw = input("  > ").strip().lower()
+        raw = input("> ").strip().lower()
         if raw == 'r':
             return 'recluster', min_cluster_size, _ask_strategy(algorithm)
         elif raw == 't':
@@ -355,11 +282,11 @@ def ask_action(min_cluster_size: int, algorithm: str = 'hdbscan') -> tuple[str, 
         elif raw == 'l':
             return 'recluster', l, _ask_strategy(algorithm)
         elif raw == 'c':
-            v = input(f"  min_cluster_size [{min_cluster_size}]: ").strip()
+            v = input(f"min_cluster_size [{min_cluster_size}]: ").strip()
             try:
                 mcs = int(v) if v else min_cluster_size
             except ValueError:
-                print("  Must be an integer.")
+                print("  must be an integer")
                 continue
             return 'recluster', mcs, _ask_strategy(algorithm)
         elif raw == 'f':
@@ -369,10 +296,8 @@ def ask_action(min_cluster_size: int, algorithm: str = 'hdbscan') -> tuple[str, 
         elif raw == 'q':
             return 'quit', min_cluster_size, None
         else:
-            print("  Unknown. Use r/t/l/c/f/s/q.")
+            print("  use r/t/l/c/f/s/q")
 
-
-# ── Subprocess wrappers ───────────────────────────────────────────────────────
 
 def _run(cmd: list[str]) -> bool:
     print(f"\n  $ {' '.join(str(x) for x in cmd)}\n")
@@ -380,7 +305,6 @@ def _run(cmd: list[str]) -> bool:
 
 
 def run_reduction(filter_csv: Path, out: Path, args, plot: bool = False) -> bool:
-    """Re-embed the filtered windows using PCA or UMAP."""
     if args.reduction == 'pca':
         cmd = [
             sys.executable, str(ROOT / 'analysis' / 'pca_sliding_window.py'),
@@ -462,95 +386,6 @@ def run_ensemble(pca_root: Path, ensemble_out: Path, args) -> bool:
     return _run(cmd)
 
 
-# ── Optional classifier predictions ──────────────────────────────────────────
-
-def load_classifier(model_path: Path):
-    """Load joblib model payload. Returns None silently if joblib is unavailable."""
-    try:
-        import joblib
-        return joblib.load(model_path)
-    except Exception as e:
-        print(f"  [warn] Could not load classifier: {e}")
-        return None
-
-
-def predict_clusters_for_review(df: pd.DataFrame, npz_root: Path, payload: dict,
-                                 confidence_threshold: float = 0.6) -> dict:
-    """
-    Returns {cluster_id: {'label': str, 'confidence': float, 'detail': str}}
-    for display in the interactive review. Never raises — silently skips on error.
-    """
-    try:
-        import utilities.configs as configs
-        import utilities.feature_utils as futils
-        from clustering_core import mfcc_features
-    except Exception:
-        return {}
-
-    spec_cfg      = configs.get_specgram_config()
-    window_frames = round(payload["window_secs"] * spec_cfg["sample_rate"] / spec_cfg["hop_length"])
-    mel_start     = payload["mel_start"]
-    mel_end       = payload["mel_end"]
-    n_mfcc        = payload["n_mfcc"]
-    model         = payload["model"]
-    npz_index     = {p.name: p for p in npz_root.glob("*.npz")}
-
-    # Predict per window
-    preds, confs, clusters = [], [], []
-    for _, row in df.iterrows():
-        npz_path = npz_index.get(row["File"])
-        if npz_path is None:
-            continue
-        try:
-            win  = futils.get_window(npz_path, float(row["Start Time (s)"]),
-                                     window_frames, mel_start, mel_end, spec_cfg)
-            feat = mfcc_features(win, n_mfcc=n_mfcc).reshape(1, -1)
-            preds.append(model.predict(feat)[0])
-            confs.append(float(model.predict_proba(feat).max()))
-            clusters.append(row["cluster"])
-        except Exception:
-            continue
-
-    if not preds:
-        return {}
-
-    # Aggregate per cluster
-    result = {}
-    pred_arr    = np.array(preds)
-    conf_arr    = np.array(confs)
-    cluster_arr = np.array(clusters)
-
-    for cid in df["cluster"].unique():
-        mask = cluster_arr == cid
-        if not mask.any():
-            continue
-        c_preds = pred_arr[mask]
-        c_confs = conf_arr[mask]
-        types, counts = np.unique(c_preds, return_counts=True)
-        top_idx  = counts.argmax()
-        top_type = types[top_idx]
-        top_frac = counts[top_idx] / mask.sum()
-        mean_conf = c_confs.mean()
-
-        flags = []
-        if top_frac < 0.7:
-            flags.append("mixed")
-        if mean_conf < confidence_threshold:
-            flags.append("uncertain")
-
-        dist = "  ".join(f"{t}:{c}" for t, c in zip(types, counts))
-        detail = f"({dist})" if len(types) > 1 else ""
-        flag_str = " ⚑ " + "+".join(flags) if flags else ""
-
-        result[cid] = {
-            "label":      top_type,
-            "confidence": mean_conf,
-            "detail":     f"{detail}{flag_str}",
-        }
-    return result
-
-
-# ── Main loop ─────────────────────────────────────────────────────────────────
 
 def main():
     ap = argparse.ArgumentParser(
@@ -592,12 +427,6 @@ def main():
                     help="Clustering algorithm; overridden by --strategy (default: dpmm)")
     ap.add_argument('--n-clusters', type=int, default=10,
                     help="k for kmeans (default: 10)")
-    # Optional classifier (informational only — does not affect keep/remove logic)
-    ap.add_argument('--model-path', default=None,
-                    help="Trained type classifier (evaluation/type_classifier.joblib). "
-                         "Shows predictions per cluster — does not change labelling behaviour.")
-    ap.add_argument('--confidence-threshold', type=float, default=0.6,
-                    help="Below this confidence, clusters are flagged as uncertain (default: 0.6)")
     # Type annotation output
     ap.add_argument('--type-annotations-csv',
                     default=str(ROOT / 'evaluation' / 'type_annotations.csv'),
@@ -628,29 +457,11 @@ def main():
 
     min_cluster_size = args.min_cluster_size
 
-    # Load optional classifier once at startup
-    classifier = None
-    if args.model_path:
-        classifier = load_classifier(Path(args.model_path))
-        if classifier:
-            print(f"  Classifier loaded : {args.model_path}  (classes: {classifier['classes']})")
+    print(f"output: {output_root}")
+    print(f"npz:    {args.npz_root}")
 
-    print()
-    print("  ╔══════════════════════════════════════════════════════════╗")
-    print("  ║       Iterative Cluster Review — Narwhal Detection       ║")
-    print("  ╚══════════════════════════════════════════════════════════╝")
-    print(f"  Output root       : {output_root}")
-    print(f"  NPZ root          : {args.npz_root}")
-
-    # Run initial clustering on the provided PCA root
     init_clusters_dir = output_root / "clusters_init"
-    if args.algorithm == 'dpmm':
-        algo_desc = f"DPMM  max_components={args.dpmm_max_components}  α={args.dpmm_concentration}"
-    elif args.algorithm == 'kmeans':
-        algo_desc = f"kmeans  k={args.n_clusters}"
-    else:
-        algo_desc = f"HDBSCAN  min_cluster_size={min_cluster_size}"
-    print(f"\n  Running initial clustering on {args.pca_root}  [{algo_desc}]...")
+    print(f"\nRunning initial clustering ({args.algorithm}, mcs={min_cluster_size})...")
     if not run_cluster_step(Path(args.pca_root), init_clusters_dir, min_cluster_size, args):
         print("[error] Initial clustering failed.")
         sys.exit(1)
@@ -666,17 +477,9 @@ def main():
             print(f"\n[error] {e}")
             sys.exit(1)
 
-        print(f"\n  Loaded {len(df)} windows from {current_clusters_dir}")
+        print(f"\nLoaded {len(df)} windows from {current_clusters_dir}")
 
-        # Compute classifier predictions (informational only)
-        cluster_preds = {}
-        if classifier:
-            cluster_preds = predict_clusters_for_review(
-                df, Path(args.npz_root), classifier, args.confidence_threshold)
-
-        # Interactive review
-        labels, types = review_pass(df, current_clusters_dir, pass_n,
-                                    cluster_preds=cluster_preds)
+        labels, types = review_pass(df, current_clusters_dir, pass_n)
 
         # Summary
         show_summary(labels, types, df)
@@ -688,7 +491,7 @@ def main():
                 'labels': {str(k): v for k, v in labels.items()},
                 'types':  {str(k): v for k, v in types.items()},
             }, f, indent=2)
-        print(f"\n  [labels saved → {labels_file}]")
+        print(f"  [labels saved → {labels_file}]")
 
         # Save type annotations to central CSV
         save_type_annotations(df, types, Path(args.type_annotations_csv))
@@ -701,67 +504,45 @@ def main():
             args.algorithm    = s['algorithm']
             args.feature_mode = s['feature_mode']
             args.pca_method   = s['pca_method']
-            print(f"  Strategy → {s['desc']}")
+            print(f"  strategy: {s['desc']}")
 
         if action == 'quit':
-            print("\n  Exiting without further changes.")
             sys.exit(0)
 
         # Build filtered CSV for the kept windows
         keep_ids    = [c for c in df['cluster'].unique()
-                       if labels.get(c) not in REMOVE_LABELS]
+                       if labels.get(c) != 'remove']
         filtered_df = df[df['cluster'].isin(keep_ids)].copy()
         pass_dir    = output_root / f"pass_{pass_n}"
         pass_dir.mkdir(exist_ok=True)
         filtered_csv = pass_dir / 'kept_windows.csv'
         filtered_df[['File', 'Start Time (s)']].to_csv(filtered_csv, index=False)
-        print(f"\n  [{len(filtered_df)} windows kept → {filtered_csv}]")
+        print(f"  [{len(filtered_df)} windows kept → {filtered_csv}]")
 
         if action == 'save':
-            print(f"\n  Done. Filtered windows CSV: {filtered_csv}")
             sys.exit(0)
 
-        # Re-embed filtered windows with PCA or UMAP
         reduction_dir = pass_dir / args.reduction
         is_final      = action == 'final'
-        if args.reduction == 'pca':
-            embed_desc = f"PCA  method={args.pca_method}  n_components={args.n_components}"
-        else:
-            embed_desc = f"UMAP  feature={args.feature_mode}  n_components={args.n_components}  n_neighbors={args.n_neighbors}  min_dist={args.min_dist}"
-
-        if args.algorithm == 'dpmm':
-            algo_desc = f"{args.algorithm.upper()}  max_components={args.dpmm_max_components}  α={args.dpmm_concentration}"
-        elif args.algorithm == 'hdbscan':
-            algo_desc = f"{args.algorithm.upper()}  min_cluster_size={min_cluster_size}"
-        else:
-            algo_desc = f"{args.algorithm.upper()}  k={args.n_clusters}"
-
-        method_desc = f"{embed_desc}  |  {algo_desc}"
-        print(f"\n  Re-embedding {len(filtered_df)} windows  [{embed_desc}]...")
+        print(f"\nRe-embedding {len(filtered_df)} windows ({args.reduction}, {args.pca_method})...")
         if not run_reduction(filtered_csv, reduction_dir, args, plot=is_final):
-            print(f"[error] {args.reduction.upper()} step failed — check output above.")
+            print(f"[error] {args.reduction.upper()} step failed")
             sys.exit(1)
 
         if is_final:
-            ensemble_dir  = pass_dir / 'ensemble'
-            ensemble_desc = f"{args.ensemble_base_algorithm.upper()}  100 runs  min_cluster_size={args.min_cluster_size}"
-            if args.ensemble_base_algorithm == 'dpmm':
-                ensemble_desc += f"  max_components={args.dpmm_max_components}  α={args.dpmm_concentration}"
-            print(f"\n  Running final ensemble clustering  [{embed_desc}  |  {ensemble_desc}]...")
+            ensemble_dir = pass_dir / 'ensemble'
+            print(f"\nRunning final ensemble clustering...")
             if not run_ensemble(reduction_dir, ensemble_dir, args):
-                print("[error] Ensemble clustering failed — check output above.")
+                print("[error] Ensemble clustering failed")
                 sys.exit(1)
-            print(f"\n  Final clustering complete → {ensemble_dir}")
-            print("  Entering review of final clusters...")
+            print(f"Final clustering → {ensemble_dir}")
             current_clusters_dir = ensemble_dir
         else:
-            # action == 'recluster'
             cluster_dir = pass_dir / 'clusters'
-            print(f"\n  Clustering  [{method_desc}]...")
+            print(f"\nClustering ({args.algorithm}, mcs={min_cluster_size})...")
             if not run_cluster_step(reduction_dir, cluster_dir, min_cluster_size, args):
-                print("[error] Clustering step failed — check output above.")
+                print("[error] Clustering step failed")
                 sys.exit(1)
-            print(f"\n  Pass {pass_n} done → {cluster_dir}")
             current_clusters_dir = cluster_dir
 
         pass_n += 1
