@@ -62,7 +62,7 @@ def get_pipeline_config():
         skip_extraction=False,  # skip npz file extraction (use existing .npz files in output)
         skip_pca=False,  # skip PCA (use existing pca_results.npz in output)
         no_plot=False,  # skip plotting outliers (only save CSV)
-        no_audio_clips=False,  # skip saving audio clips for outliers (only save CSV)
+        no_audio_clips=True,   # skip saving audio clips for outliers (only save CSV)
 
         # Subset flag (for testing)
         subset_len=0,  # only process first n audio files

@@ -277,10 +277,9 @@ def main():
 
     if not args.no_plot:
         plot_path = output_root / "pca_plot.png"
-        if len(npz_files) == 1:
-            putils.plot_pca_projection_single(X_pca, evr, window_meta, plot_path)
-        else:
-            putils.plot_pca_projection(X_pca, evr, window_meta, plot_path)
+        putils.plot_pca_projection(X_pca, evr, window_meta, plot_path)
+        putils.plot_pca_projection_3d(X_pca, evr, window_meta,
+                                      output_root / "pca_plot_3d.png")
 
         print(f"Saved to {plot_path}")
 

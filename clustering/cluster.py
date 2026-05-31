@@ -5,7 +5,7 @@ Two modes:
   --outliers-csv   Cluster only the detected outliers from outliers.csv
   (omit)           Cluster every window in pca_results.npz
 
-Algorithms:  kmeans | gmm | agglomerative | hdbscan | optics
+Algorithms:  kmeans | hdbscan | dpmm
 
 Usage:
     # Cluster detected outliers
@@ -58,7 +58,7 @@ def main():
                     help="Spectrogram .npz directory (needed for grids and acoustic features)")
     # Algorithm
     ap.add_argument("--algorithm",   default="kmeans",
-                    choices=["kmeans", "gmm", "agglomerative", "hdbscan", "optics", "dpmm"])
+                    choices=["kmeans", "hdbscan", "dpmm"])
     ap.add_argument("--n-clusters",  type=int, default=5)
     ap.add_argument("--cluster-dims", type=int, default=10,
                     help="PCA dimensions to use for clustering (default: 10)")
@@ -123,7 +123,7 @@ def main():
         print(f"Mode: all windows ({len(df)} windows from pca_results.npz)")
 
     n = len(df)
-    if args.algorithm in NEEDS_K and args.algorithm != "dpmm" and n < args.n_clusters:
+    if args.algorithm in NEEDS_K and n < args.n_clusters:
         raise ValueError(f"Fewer windows ({n}) than clusters ({args.n_clusters}).")
 
     # ── Build feature matrix ─────────────────────────────────────────────────

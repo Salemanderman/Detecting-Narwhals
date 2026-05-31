@@ -38,10 +38,15 @@ def _filter_by_length(dataset, start_secs, target_sr=64_000):
 
     lengths = {}
     for p in tqdm(files, desc="Scanning file lengths", unit="file", leave=False):
-        info = torchaudio.info(str(p))
-        total = int(info.num_frames / info.sample_rate * target_sr)
-        remaining = total - int(start_secs * target_sr)
-        lengths[str(p)] = max(0, round(remaining / target_sr) - 1) * target_sr  # same as AudioDataset
+        try:
+            info = torchaudio.info(str(p))
+        except Exception as e:
+            print(f"  [skip] {Path(p).name}: {e}")
+            continue
+        sr  = info.sample_rate
+        s   = int(start_secs * sr)
+        dur = max(0, round((info.num_frames - s) / sr) - 1) * sr  # same formula as AudioDataset
+        lengths[str(p)] = int(dur / sr * target_sr)
 
     if not lengths:
         raise RuntimeError(f"No audio files found under {base.root_dir}")
@@ -77,7 +82,7 @@ def main():
 
     start_secs = args.audio_crop_start_secs
     batch_size = args.batch_size
-    print(f" [info] cropping first {start_secs} s from start; snapping end to 1-second boundary.")
+    print(f" [info] cropping first {start_secs} s from start. snapping end to 1-second boundary.")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Input:  {audio_root}")

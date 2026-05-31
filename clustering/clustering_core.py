@@ -6,11 +6,12 @@ No matplotlib — pure computation only.
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from sklearn.cluster import KMeans, HDBSCAN, AgglomerativeClustering, OPTICS
-from sklearn.mixture import GaussianMixture, BayesianGaussianMixture
+from scipy.fft import dct
+from sklearn.cluster import KMeans, HDBSCAN
+from sklearn.mixture import BayesianGaussianMixture
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
 
-NEEDS_K = {"kmeans", "gmm", "agglomerative"}
+NEEDS_K = {"kmeans"}
 
 
 def compute_distances(X_pca: np.ndarray, metric: str = "euclidean") -> np.ndarray:
@@ -103,7 +104,7 @@ def mfcc_features(window: np.ndarray, n_mfcc: int = 20) -> np.ndarray:
     Applies DCT along the frequency axis to each frame, keeps the first n_mfcc
     coefficients, then summarises across time with mean and std.
     """
-    from scipy.fft import dct
+    
     # window is already log-mel; DCT along frequency axis → (n_mfcc, n_frames)
     mfccs = dct(window, axis=0, norm="ortho")[:n_mfcc, :]
     return np.concatenate([mfccs.mean(axis=1), mfccs.std(axis=1)]).astype(np.float32)
@@ -115,16 +116,9 @@ def run_clustering(X_norm: np.ndarray, args) -> np.ndarray:
     if algo == "kmeans":
         return KMeans(n_clusters=args.n_clusters, n_init=10,
                       random_state=args.seed).fit_predict(X_norm)
-    elif algo == "gmm":
-        return GaussianMixture(n_components=args.n_clusters,
-                               random_state=args.seed).fit_predict(X_norm)
-    elif algo == "agglomerative":
-        return AgglomerativeClustering(n_clusters=args.n_clusters).fit_predict(X_norm)
     elif algo == "hdbscan":
         return HDBSCAN(min_cluster_size=args.min_cluster_size,
                        min_samples=args.min_samples or args.min_cluster_size).fit_predict(X_norm)
-    elif algo == "optics":
-        return OPTICS(min_samples=args.min_samples or 5).fit_predict(X_norm)
     elif algo == "dpmm":
         max_k       = getattr(args, "dpmm_max_components", 20)
         alpha       = getattr(args, "dpmm_concentration",  0.01)
