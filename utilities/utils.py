@@ -8,36 +8,14 @@ from torch.utils.data import Dataset
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def towsey_noise_removal(
+def _towsey_single_chunk(
     spec: np.ndarray,
-    N: float = 0.0,
-    smooth_window: int = 5,
-    neighbourhood: bool = True,
-    neighbourhood_threshold: float = 2.0,
+    N: float,
+    smooth_window: int,
+    neighbourhood: bool,
+    neighbourhood_threshold: float,
 ) -> np.ndarray:
-    """
-    Towsey (2013) adaptive modal noise subtraction.
-
-    For each frequency bin, builds a histogram of intensity values across all time
-    frames, finds the modal (most frequent) value as the background estimate, and
-    subtracts it. N standard deviations above the mode can optionally be added to
-    the threshold (paper recommends N=0.0 for spectrograms; N>0.1 removes signal).
-
-    Steps from the paper:
-      A. Per-bin: histogram → modal value → subtract (modal + N*std) → truncate to 0
-      B. Smooth noise profile across frequency bins before subtraction
-      C. Neighbourhood suppression: zero pixels whose 9×3 local average < threshold
-
-    Args:
-        spec: (n_bins, n_frames) spectrogram, any scale (dB or linear).
-        N: std devs above mode added to threshold (default 0.0).
-        smooth_window: moving-average width for histogram and profile smoothing.
-        neighbourhood: apply Step C local suppression.
-        neighbourhood_threshold: pixels with local average below this are zeroed.
-            Use ~2.0 for dB spectrograms, ~0.015 for linear-scale spectrograms.
-    Returns:
-        Noise-removed spectrogram, same shape as input, values >= 0.
-    """
+    """Apply Towsey noise removal to a single chunk (n_bins, n_frames)."""
     n_bins, n_frames = spec.shape
     n_hist_bins = max(10, n_frames // 8)
     kernel = np.ones(smooth_window) / smooth_window
@@ -73,8 +51,6 @@ def towsey_noise_removal(
         noise_profile[i] = modal_val + N * std_est
 
     # Step B: smooth noise profile across frequency bins, then subtract.
-    # Edge-pad with the boundary value before convolving so the 2 outermost bins
-    # get a full-window average instead of a zero-padded (underestimated) one.
     pad = len(kernel) // 2
     noise_profile = np.convolve(np.pad(noise_profile, pad, mode='edge'), kernel, mode='valid')
     result = np.maximum(spec - noise_profile[:, np.newaxis], 0.0).astype(np.float32)
@@ -86,6 +62,52 @@ def towsey_noise_removal(
         result = np.where(avg < neighbourhood_threshold, 0.0, result)
 
     return result
+
+
+def towsey_noise_removal(
+    spec: np.ndarray,
+    N: float = 0.0,
+    smooth_window: int = 5,
+    neighbourhood: bool = True,
+    neighbourhood_threshold: float = 2.0,
+    chunk_frames: int = 7500,
+) -> np.ndarray:
+    """
+    Towsey (2013) adaptive modal noise subtraction, applied in one-minute chunks.
+
+    Towsey (2013) recommends processing one-minute segments independently so the
+    modal noise estimate adapts to slowly-varying background conditions. At 64 kHz
+    sample rate with hop_length=512, one minute is 7500 frames (the default).
+
+    Steps from the paper:
+      A. Per-bin: histogram (length = n_frames/8) → modal value → subtract (modal + N*std)
+      B. Smooth noise profile across frequency bins before subtraction
+      C. Neighbourhood suppression: zero pixels whose 9×3 local average < threshold
+
+    Args:
+        spec: (n_bins, n_frames) spectrogram in dB.
+        N: std devs above mode added to threshold (default 0.0; >0.1 removes signal).
+        smooth_window: moving-average width for histogram and profile smoothing.
+        neighbourhood: apply Step C local suppression.
+        neighbourhood_threshold: pixels with local average below this are zeroed (~2 dB).
+        chunk_frames: frames per processing chunk (default 7500 ≈ 1 min at 64 kHz/512 hop).
+    Returns:
+        Noise-removed spectrogram, same shape as input, values >= 0.
+    """
+    n_bins, n_frames = spec.shape
+
+    if n_frames <= chunk_frames:
+        return _towsey_single_chunk(spec, N, smooth_window, neighbourhood, neighbourhood_threshold)
+
+    chunks = []
+    start = 0
+    while start < n_frames:
+        end = min(start + chunk_frames, n_frames)
+        chunks.append(_towsey_single_chunk(
+            spec[:, start:end], N, smooth_window, neighbourhood, neighbourhood_threshold))
+        start = end
+
+    return np.concatenate(chunks, axis=1)
 
 
 class AudioDataset(Dataset):

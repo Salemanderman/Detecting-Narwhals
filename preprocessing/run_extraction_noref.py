@@ -72,7 +72,7 @@ def main():
     ap.add_argument("--audio-crop-start-secs", type=int, default=5, dest="audio_crop_start_secs", help="Seconds to cut from the start of each recording (default: 5).")
     ap.add_argument("--linear-freq", action="store_true", default=False, help="Use linear frequency scale instead of mel scale.")
     ap.add_argument("--n-mels", type=int, default=None, dest="n_mels", help="Number of mel bins (default: from config). Ignored if --linear-freq is set.")
-    ap.add_argument("--num-workers", type=int, default=4, dest="num_workers", help="DataLoader worker processes (default: 4, use 0 on Windows if errors occur).")
+    ap.add_argument("--num-workers", type=int, default=0, dest="num_workers", help="DataLoader worker processes (default: 4, use 0 on Windows if errors occur).")
     ap.add_argument("--batch-size", type=int, default=32, dest="batch_size", help="Files per GPU batch (default: 32).")
     args = ap.parse_args()
 
