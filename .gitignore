@@ -28,7 +28,7 @@
 !analysis/autoencoder_results/evaluation_set
 !analysis/autoencoder_results/towsey_n0.5/
 !analysis/autoencoder_results/towsey_n0.5/evaluation_set.csv
-!analysis/calculate_mean_values_spectrogram.ipynb
+
 !analysis/autoencoder_results/towsey_n0.5/evaluation_set
 
 !evaluation
@@ -43,5 +43,9 @@
 
 !hyperparameter_tuning
 !hyperparameter_tuning/hyperparameter_tuning.py
+
+!plotsReport
+!plotsReport/towsey_walkthrough.ipynb
+!plotsReport/calculate_mean_values_spectrogram.ipynb
 
 !environment.yml
