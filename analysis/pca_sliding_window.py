@@ -31,21 +31,23 @@ import pandas as pd
 from sklearn.decomposition import IncrementalPCA
 
 
-def _int_or_none(v):
-    return None if str(v).lower() == "none" else int(v)
+
 from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "clustering"))
+
 
 import utilities.configs as configs
 import utilities.feature_utils as futils
 import utilities.plot_utils as putils
-from clustering_core import mfcc_features
+from clustering.clustering_core import mfcc_features
 
 
 # Helper functions:
+
+def _int_or_none(v):
+    return None if str(v).lower() == "none" else int(v)
 
 ###### Maybe try with using the full window frames as features instead of summarising with mean+std?
 ###### Pros: More detailed info, PCA can find patterns across time frames.

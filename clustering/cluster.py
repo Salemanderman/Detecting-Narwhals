@@ -96,19 +96,29 @@ def main():
     X_pca = pca_data["X_pca"]
 
     # ── Build DataFrame ──────────────────────────────────────────────────────
+    window_files  = np.array(pca_data["window_files"], dtype=str)
+    window_secs   = pca_data["window_start_secs"].astype(float)
+    window_frames = pca_data["window_start_frames"].astype(int)
+
     if args.outliers_csv:
-        df      = pd.read_csv(args.outliers_csv)
-        if "Index" not in df.columns:
-            raise ValueError("outliers.csv must have an 'Index' column.")
-        indices = df["Index"].to_numpy(dtype=int)
-        out_csv = "clusters.csv"
-        mode    = "outliers"
-        print(f"Mode: outliers ({len(df)} windows from {args.outliers_csv})")
+        df = pd.read_csv(args.outliers_csv)
+        indices    = []
+        keep_rows  = []
+        for i, (_, row) in enumerate(df.iterrows()):
+            mask = (window_files == str(row["File"])) & \
+                   (np.abs(window_secs - float(row["Start Time (s)"])) < 0.01)
+            hits = np.where(mask)[0]
+            if len(hits):
+                indices.append(hits[0])
+                keep_rows.append(i)
+        skipped = len(df) - len(indices)
+        if skipped:
+            print(f"  [warn] {skipped} rows in outliers CSV not found in pca_results — skipped")
+        indices = np.array(indices, dtype=int)
+        df      = df.iloc[keep_rows].reset_index(drop=True)
+        print(f"Mode: outliers ({len(indices)} windows from {args.outliers_csv})")
     else:
-        window_files  = np.array(pca_data["window_files"], dtype=str)
-        window_secs   = pca_data["window_start_secs"].astype(float)
-        window_frames = pca_data["window_start_frames"].astype(int)
-        indices = np.arange(len(X_pca))
+        indices   = np.arange(len(X_pca))
         distances = compute_distances(X_pca, "euclidean")
         df = pd.DataFrame({
             "File":           window_files,
@@ -118,9 +128,9 @@ def main():
             "PC2":            X_pca[:, 1] if X_pca.shape[1] > 1 else 0.0,
             "Distance":       distances,
         })
-        out_csv = "clusters.csv"
-        mode    = "all_windows"
         print(f"Mode: all windows ({len(df)} windows from pca_results.npz)")
+
+    out_csv = "clusters.csv"
 
     n = len(df)
     if args.algorithm in NEEDS_K and n < args.n_clusters:
@@ -157,11 +167,11 @@ def main():
     df.to_csv(output_root / out_csv, index=False)
     print(f"\n[csv] {output_root / out_csv}")
 
-    summary = (df.groupby("cluster")
-                 .agg(count=("cluster", "count"),
-                      mean_distance=("Distance", "mean"),
-                      max_distance=("Distance", "max"))
-                 .reset_index())
+    agg = {"count": ("cluster", "count")}
+    if "Distance" in df.columns:
+        agg["mean_distance"] = ("Distance", "mean")
+        agg["max_distance"]  = ("Distance", "max")
+    summary = df.groupby("cluster").agg(**agg).reset_index()
     summary.to_csv(output_root / "cluster_summary.csv", index=False)
     pd.DataFrame([metrics]).to_csv(output_root / "metrics.csv", index=False)
     print(f"\n{summary.to_string(index=False)}")
@@ -173,7 +183,7 @@ def main():
                       output_root / "cluster_scatter.png", n_total=n)
         plot_cluster_sizes(labels, k, output_root / "cluster_sizes.png")
         plot_distance_boxplot(df, k, output_root / "distance_boxplot.png")
-        if mode == "all_windows":
+        if not args.outliers_csv:
             plot_recorder_distribution(df, k, output_root / "recorder_distribution.png")
         if labeled.sum() > k > 1:
             plot_silhouette(X_norm, labels, k, output_root / "silhouette.png")
