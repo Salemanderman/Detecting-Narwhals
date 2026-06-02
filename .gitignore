@@ -21,6 +21,7 @@
 !analysis
 !analysis/finding_outliers.py
 !analysis/pca_sliding_window.py
+!analysis/umap_embedding.py
 !analysis/plot_spectrogram_windows.py
 !analysis/towsey_walkthrough.ipynb
 !analysis/autoencoder_anomaly_detection.ipynb
