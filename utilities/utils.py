@@ -119,7 +119,7 @@ class AudioDataset(Dataset):
     """
     def __init__(self, root_dir, target_sr=64000, start_secs=5):
         self.root_dir = Path(root_dir) # Root data folder.
-        self.files = list(self.root_dir.rglob("*.wav")) # Searches for pattern in subfolders.
+        self.files = list(self.root_dir.rglob("*.wav"))  # Searches for pattern in subfolders.
         self.target_sr = target_sr # Can change from original raw 64 kHz to common 16 kHz.
         self.start_secs = start_secs
 
