@@ -38,10 +38,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(CLUSTER_DIR))
 
 import utilities.configs as configs
-from clustering_core  import (NEEDS_K, compute_distances,
-                               run_clustering, compute_metrics, compute_validation_recall)
+from clustering_core  import (NEEDS_K, run_clustering, compute_metrics, compute_validation_recall)
 from clustering_plots import (plot_clusters, plot_cluster_sizes, plot_silhouette,
-                               plot_distance_boxplot, plot_recorder_distribution,
+                               plot_recorder_distribution,
                                plot_validation_recall, save_cluster_grid)
 
 
@@ -120,20 +119,15 @@ def main():
             print(f"  [warn] {skipped} rows in outliers CSV not found in pca_results — skipped")
         indices = np.array(indices, dtype=int)
         df      = df.iloc[keep_rows].reset_index(drop=True)
-        if "Distance" not in df.columns:
-            distances = compute_distances(X_pca, "euclidean")
-            df["Distance"] = distances[indices]
         print(f"Mode: outliers ({len(indices)} windows from {args.outliers_csv})")
     else:
-        indices   = np.arange(len(X_pca))
-        distances = compute_distances(X_pca, "euclidean")
+        indices = np.arange(len(X_pca))
         df = pd.DataFrame({
             "File":           window_files,
             "Start Frame":    window_frames,
             "Start Time (s)": window_secs,
             "PC1":            X_pca[:, 0],
             "PC2":            X_pca[:, 1] if X_pca.shape[1] > 1 else 0.0,
-            "Distance":       distances,
         })
         print(f"Mode: all windows ({len(df)} windows from pca_results.npz)")
     progress.update(1)
@@ -177,11 +171,7 @@ def main():
     df.to_csv(output_root / out_csv, index=False)
     print(f"\n[csv] {output_root / out_csv}")
 
-    agg = {"count": ("cluster", "count")}
-    if "Distance" in df.columns:
-        agg["mean_distance"] = ("Distance", "mean")
-        agg["max_distance"]  = ("Distance", "max")
-    summary = df.groupby("cluster").agg(**agg).reset_index()
+    summary = df.groupby("cluster").agg(count=("cluster", "count")).reset_index()
     summary.to_csv(output_root / "cluster_summary.csv", index=False)
     pd.DataFrame([metrics]).to_csv(output_root / "metrics.csv", index=False)
     print(f"\n{summary.to_string(index=False)}")
@@ -193,8 +183,6 @@ def main():
         plot_clusters(X_pca[indices, :2], labels, k, args.algorithm,
                       output_root / "cluster_scatter.png", n_total=n)
         plot_cluster_sizes(labels, k, output_root / "cluster_sizes.png")
-        if "Distance" in df.columns:
-            plot_distance_boxplot(df, k, output_root / "distance_boxplot.png")
         if not args.outliers_csv:
             plot_recorder_distribution(df, k, output_root / "recorder_distribution.png")
         if labeled.sum() > k > 1:

@@ -207,7 +207,7 @@ def save_cluster_grid(cluster_df, cluster_id, npz_root, window_frames, spec_cfg,
         return
 
     save_path  = Path(save_path)
-    sorted_df  = cluster_df.sort_values("Distance", ascending=False)
+    sorted_df  = cluster_df
     n_pages    = max(1, (n + page_size - 1) // page_size)
     label      = "Noise" if cluster_id == -1 else f"Cluster {cluster_id}"
 
@@ -226,7 +226,7 @@ def save_cluster_grid(cluster_df, cluster_id, npz_root, window_frames, spec_cfg,
                 w = futils.get_window(npz_root / row["File"], t, window_frames,
                                       mel_start=mel_start, mel_end=mel_end, spec_cfg=spec_cfg)
                 ax.imshow(w, aspect="auto", origin="lower", cmap="viridis")
-                ax.set_title(f"{Path(row['File']).stem[:18]}\nt={t:.1f}s  d={row['Distance']:.2f}",
+                ax.set_title(f"{Path(row['File']).stem[:18]}\nt={t:.1f}s",
                              fontsize=8)
             except Exception as e:
                 ax.set_title(f"Error: {e}", fontsize=7)
