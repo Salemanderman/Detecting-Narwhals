@@ -36,6 +36,7 @@
 !evaluation/validatedChristerCalls.csv
 !evaluation/compareChristerCalls.py
 !evaluation/type_annotations.csv
+!evaluation/type_classifier.joblib
 
 !clustering
 !clustering/cluster.py

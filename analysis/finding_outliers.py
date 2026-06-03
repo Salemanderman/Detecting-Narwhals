@@ -59,7 +59,7 @@ def compute_distances(X_pca: np.ndarray, metric: str = "mahalanobis"):
         distances = np.sqrt(np.sum((X_pca - mean_pca) ** 2, axis=1))
     elif metric == "mahalanobis":
         cov_pca = np.cov(X_pca, rowvar=False)
-        inv_cov = np.linalg.pinv(cov_pca)
+        inv_cov = np.linalg.inv(cov_pca)
         distances = np.array([
             np.sqrt((X_pca[i] - mean_pca).T @ inv_cov @ (X_pca[i] - mean_pca))
             for i in tqdm(range(X_pca.shape[0]), desc="Computing distances", unit="window")
