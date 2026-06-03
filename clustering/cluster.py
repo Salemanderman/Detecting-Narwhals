@@ -83,6 +83,9 @@ def main():
     ap.add_argument("--no-plot", action="store_true", default=False)
     args = ap.parse_args()
 
+    # High-level progress tracker for long runs.
+    progress = tqdm(total=6, desc="Clustering pipeline", unit="step")
+
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     with open(output_root / "run_config.json", "w") as f:
@@ -94,6 +97,7 @@ def main():
         raise FileNotFoundError(f"pca_results.npz not found in {args.pca_root}")
     pca_data = np.load(pca_file, allow_pickle=True)
     X_pca = pca_data["X_pca"]
+    progress.update(1)
 
     # ── Build DataFrame ──────────────────────────────────────────────────────
     window_files  = np.array(pca_data["window_files"], dtype=str)
@@ -104,7 +108,7 @@ def main():
         df = pd.read_csv(args.outliers_csv)
         indices    = []
         keep_rows  = []
-        for i, (_, row) in enumerate(df.iterrows()):
+        for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="Matching outliers", unit="row")):
             mask = (window_files == str(row["File"])) & \
                    (np.abs(window_secs - float(row["Start Time (s)"])) < 0.01)
             hits = np.where(mask)[0]
@@ -116,6 +120,9 @@ def main():
             print(f"  [warn] {skipped} rows in outliers CSV not found in pca_results — skipped")
         indices = np.array(indices, dtype=int)
         df      = df.iloc[keep_rows].reset_index(drop=True)
+        if "Distance" not in df.columns:
+            distances = compute_distances(X_pca, "euclidean")
+            df["Distance"] = distances[indices]
         print(f"Mode: outliers ({len(indices)} windows from {args.outliers_csv})")
     else:
         indices   = np.arange(len(X_pca))
@@ -129,6 +136,7 @@ def main():
             "Distance":       distances,
         })
         print(f"Mode: all windows ({len(df)} windows from pca_results.npz)")
+    progress.update(1)
 
     out_csv = "clusters.csv"
 
@@ -142,12 +150,14 @@ def main():
     feature_desc = f"pca({dims})"
 
     X_norm = StandardScaler().fit_transform(X_feat)
+    progress.update(1)
 
     # ── Cluster ──────────────────────────────────────────────────────────────
     print(f"\nClustering {n} windows  features={feature_desc}  algorithm={args.algorithm}  k={args.n_clusters}")
     labels  = run_clustering(X_norm, args)
     k       = int(labels.max()) + 1
     n_noise = int((labels == -1).sum())
+    progress.update(1)
 
     for j in range(k):
         c = int((labels == j).sum())
@@ -175,6 +185,7 @@ def main():
     summary.to_csv(output_root / "cluster_summary.csv", index=False)
     pd.DataFrame([metrics]).to_csv(output_root / "metrics.csv", index=False)
     print(f"\n{summary.to_string(index=False)}")
+    progress.update(1)
 
     # ── Plots ────────────────────────────────────────────────────────────────
     if not args.no_plot:
@@ -182,7 +193,8 @@ def main():
         plot_clusters(X_pca[indices, :2], labels, k, args.algorithm,
                       output_root / "cluster_scatter.png", n_total=n)
         plot_cluster_sizes(labels, k, output_root / "cluster_sizes.png")
-        plot_distance_boxplot(df, k, output_root / "distance_boxplot.png")
+        if "Distance" in df.columns:
+            plot_distance_boxplot(df, k, output_root / "distance_boxplot.png")
         if not args.outliers_csv:
             plot_recorder_distribution(df, k, output_root / "recorder_distribution.png")
         if labeled.sum() > k > 1:
@@ -223,6 +235,9 @@ def main():
                     mel_start=args.mel_start, mel_end=args.mel_end,
                     page_size=args.page_size,
                 )
+
+    progress.update(1)
+    progress.close()
 
     print(f"\n[done] {output_root}")
 
