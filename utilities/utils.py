@@ -8,36 +8,14 @@ from torch.utils.data import Dataset
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def towsey_noise_removal(
+def _towsey_single_chunk(
     spec: np.ndarray,
-    N: float = 0.0,
-    smooth_window: int = 5,
-    neighbourhood: bool = True,
-    neighbourhood_threshold: float = 2.0,
+    N: float,
+    smooth_window: int,
+    neighbourhood: bool,
+    neighbourhood_threshold: float,
 ) -> np.ndarray:
-    """
-    Towsey (2013) adaptive modal noise subtraction.
-
-    For each frequency bin, builds a histogram of intensity values across all time
-    frames, finds the modal (most frequent) value as the background estimate, and
-    subtracts it. N standard deviations above the mode can optionally be added to
-    the threshold (paper recommends N=0.0 for spectrograms; N>0.1 removes signal).
-
-    Steps from the paper:
-      A. Per-bin: histogram → modal value → subtract (modal + N*std) → truncate to 0
-      B. Smooth noise profile across frequency bins before subtraction
-      C. Neighbourhood suppression: zero pixels whose 9×3 local average < threshold
-
-    Args:
-        spec: (n_bins, n_frames) spectrogram, any scale (dB or linear).
-        N: std devs above mode added to threshold (default 0.0).
-        smooth_window: moving-average width for histogram and profile smoothing.
-        neighbourhood: apply Step C local suppression.
-        neighbourhood_threshold: pixels with local average below this are zeroed.
-            Use ~2.0 for dB spectrograms, ~0.015 for linear-scale spectrograms.
-    Returns:
-        Noise-removed spectrogram, same shape as input, values >= 0.
-    """
+    """Apply Towsey noise removal to a single chunk (n_bins, n_frames)."""
     n_bins, n_frames = spec.shape
     n_hist_bins = max(10, n_frames // 8)
     kernel = np.ones(smooth_window) / smooth_window
@@ -73,8 +51,6 @@ def towsey_noise_removal(
         noise_profile[i] = modal_val + N * std_est
 
     # Step B: smooth noise profile across frequency bins, then subtract.
-    # Edge-pad with the boundary value before convolving so the 2 outermost bins
-    # get a full-window average instead of a zero-padded (underestimated) one.
     pad = len(kernel) // 2
     noise_profile = np.convolve(np.pad(noise_profile, pad, mode='edge'), kernel, mode='valid')
     result = np.maximum(spec - noise_profile[:, np.newaxis], 0.0).astype(np.float32)
@@ -88,6 +64,52 @@ def towsey_noise_removal(
     return result
 
 
+def towsey_noise_removal(
+    spec: np.ndarray,
+    N: float = 0.0,
+    smooth_window: int = 5,
+    neighbourhood: bool = True,
+    neighbourhood_threshold: float = 2.0,
+    chunk_frames: int = 7500,
+) -> np.ndarray:
+    """
+    Towsey (2013) adaptive modal noise subtraction, applied in one-minute chunks.
+
+    Towsey (2013) recommends processing one-minute segments independently so the
+    modal noise estimate adapts to slowly-varying background conditions. At 64 kHz
+    sample rate with hop_length=512, one minute is 7500 frames (the default).
+
+    Steps from the paper:
+      A. Per-bin: histogram (length = n_frames/8) → modal value → subtract (modal + N*std)
+      B. Smooth noise profile across frequency bins before subtraction
+      C. Neighbourhood suppression: zero pixels whose 9×3 local average < threshold
+
+    Args:
+        spec: (n_bins, n_frames) spectrogram in dB.
+        N: std devs above mode added to threshold (default 0.0; >0.1 removes signal).
+        smooth_window: moving-average width for histogram and profile smoothing.
+        neighbourhood: apply Step C local suppression.
+        neighbourhood_threshold: pixels with local average below this are zeroed (~2 dB).
+        chunk_frames: frames per processing chunk (default 7500 ≈ 1 min at 64 kHz/512 hop).
+    Returns:
+        Noise-removed spectrogram, same shape as input, values >= 0.
+    """
+    n_bins, n_frames = spec.shape
+
+    if n_frames <= chunk_frames:
+        return _towsey_single_chunk(spec, N, smooth_window, neighbourhood, neighbourhood_threshold)
+
+    chunks = []
+    start = 0
+    while start < n_frames:
+        end = min(start + chunk_frames, n_frames)
+        chunks.append(_towsey_single_chunk(
+            spec[:, start:end], N, smooth_window, neighbourhood, neighbourhood_threshold))
+        start = end
+
+    return np.concatenate(chunks, axis=1)
+
+
 class AudioDataset(Dataset):
     """Audio dataset for hydroacoustic recordings from Inglefield Bredning Fjord, Greenland.
     Returns a dict with keys "waveform" (C, T), "sample_rate" (int), "path" (str).
@@ -97,7 +119,7 @@ class AudioDataset(Dataset):
     """
     def __init__(self, root_dir, target_sr=64000, start_secs=5):
         self.root_dir = Path(root_dir) # Root data folder.
-        self.files = list(self.root_dir.rglob("*.wav")) # Searches for pattern in subfolders.
+        self.files = list(self.root_dir.rglob("*.wav"))  # Searches for pattern in subfolders.
         self.target_sr = target_sr # Can change from original raw 64 kHz to common 16 kHz.
         self.start_secs = start_secs
 
@@ -192,162 +214,3 @@ class PipelineSpecgram(torch.nn.Module):
             return self.to_db(mel / (1e-6**2))
         else:
             return self.to_db(spec / (1e-6**2))
-
-# Helper function to reduce the number of sample points in audio data tensors.
-def reduce_tensor(w, max_pts):
-    """
-    Reduces a 1D tensor w to exactly max_pts elements. 
-    If w has more than max_pts elements, it is downsampled using fixed indices.
-    If w has fewer than max_pts elements, it is padded with zeros at the end.
-    Args:
-        w: 1D torch.Tensor.
-        max_pts: Maximum number of elements in the output tensor.
-    Returns:
-        w_small: Reduced or padded 1D tensor of length max_pts.
-    """
-    # Downsample to max_pts using fixed indices.
-    n_elms = w.numel()
-    if n_elms == max_pts:
-        return w 
-    
-    if n_elms == 0:
-        return torch.zeros(max_pts, device=w.device, dtype=w.dtype)
-    
-    if n_elms >= max_pts:
-        k = torch.arange(max_pts, device=w.device)
-        idx = torch.floor(k.to(torch.float32) * (n_elms / float(max_pts))).to(torch.long)
-        # idx = torch.linspace(0, n_elms - 1, steps=max_pts, device=w.device).to(torch.long)
-        w_small = w.index_select(0, idx)
-    else:
-        # Padding needed at dataset level to build X (data loader pads at batch-level).
-        w_small = F.pad(w, (0, max_pts - n_elms))
-    return w_small
-
-# Builds feature matrix Z as inputs to clustering models.
-def tensors_to_array(dataloader, transform, max_pts=None, dtype=np.float32, device=device):
-    """
-    Builds a (N, max_pts) feature matrix Z of type NumPy array. Z used as input for clustering 
-    algorithms. The size of Z can be reduced by downsampling based on a maximum number of 
-    points per audio recording.
-    Args:
-        dataloader: PyTorch DataLoader batches of audio waveforms.
-        max_pts: Maximum number of points per feature.  
-    Returns:
-        X: NumPy array of shape (n samples, n features).
-        ids: List of audio file identifiers corresponding to each row in X.
-    """
-
-    rows, ids = [], []
-    transform.eval()
-
-    with torch.no_grad(): # Disables gradient computations.
-        for batch in dataloader:
-            waves = batch["waveforms"]
-            paths = batch["paths"]
-            lengths = batch["lengths"]
-
-            if device is None:
-                device_ = waves.device
-            else:
-                device_ = device
-
-            B, C, Tn = waves.shape
-
-            for b in range(B):
-                L = int(lengths[b].item()) if lengths is not None else Tn
-                L = max(0, min(L, Tn))
-                w = waves[b, :, :L][0]
-                
-                T0 = w.numel()
-                if max_pts is not None:
-                    if T0 == 0:
-                        w = torch.zeros(max_pts, dtype=w.dtype, device=w.device)
-                    elif T0 > max_pts:
-                        k = torch.arange(max_pts, device=w.device)
-                        idx = torch.floor(k.to(torch.float32) * (T0 / float(max_pts))).to(torch.long)
-                        w = w.index_select(0, idx)
-                    elif T0 < max_pts:
-                        w = F.pad(w, (0, max_pts - T0)) 
-
-                # Let x be the input waveform. .view reshapes to [1, 1, T] for transformation.
-                # The shape matches [B, C, T].
-                x = w.view(1, 1, -1).to(device=device, dtype=torch.float32)
-                
-                feat = transform(x).squeeze(0)  # Transforms into [C, F, T] by removing the B dimension.
-                # where Channels (C = 1, mono), F = n_mels = 128, and T = n time frames.
-                # T contains the observations. The slice feat[:, :, t] is a feature vector at time frame t
-                # across all mel bins. 
-
-                # Mean across time frames and std across time.
-                mu = feat.mean(dim=-1, keepdim=False) 
-                sig = feat.std(dim=-1, keepdim=False) 
-                vec = torch.cat([mu, sig], dim=0)
-                # Final feature vector shape: (2 * n_mels)
-                vec = vec.reshape(-1)
-                rows.append(vec.detach().cpu().numpy().astype(dtype))
-
-                p = paths[b]
-                ids.append(Path(p).name if isinstance(p, (str, Path)) else str(p))
-                
-    
-    ids = np.array(ids, dtype=str)            
-
-    # Concatenate rows into Z.
-    # Z: (n samples, n features.)
-    Z = np.stack(rows, axis=0)
-    return Z, ids
-
-# Computes descriptive statistics: peak amplitudes, mean amplitudes, 
-# root mean squares and zero-crossing rates
-def compute_stats(w, sr, length, skip_secs):
-            
-            n_chans, n_frames = w.shape 
-
-            empty_dict = dict(duration_sec = 0, peak=0.0, mean_abs=0.0, rms=0.0, zcr_hz=0.0)
-            if n_frames <= 0:
-                   return empty_dict
-
-            s_idx = int(sr * float(skip_secs))
-            s_idx = max(0, min(s_idx, n_frames)) # Ensure no 0 length files. 
-
-            wf = w[:, :n_frames].clone()
-            if s_idx > 0:
-                wf[:, :s_idx] = 0.0 # Mute first corrupted seconds.
-            
-            # Duration in seconds.
-            duration_sec = max((n_frames - s_idx) / float(sr), 0.0)
-
-            # Wave without the muted clip.
-            if s_idx < n_frames: 
-                  wclip = wf[:, s_idx:] 
-            else: 
-                  return empty_dict
-
-            if wclip.numel() == 0:
-                  return empty_dict
-
-            peak = wclip.abs().amax().amax().item()
-            mean_abs = wclip.abs().mean().item()
-            # Root mean square.
-            rms = wclip.pow(2).mean().sqrt().item()
-            # Zero-Crossing Rate.
-            silence_band = 10e-11
-            wclip_nz = torch.where(wclip == 0, silence_band, wclip)
-            signs = torch.signbit(wclip_nz)
-
-            if wclip.shape[1] >= 2:
-                  changes = signs[:, 1:] ^ signs[:, :-1]
-                  zc = changes.sum().item()
-                  zcr_hz = (zc / (wclip_nz.shape[1] - 1)) * sr
-            else:
-                  zcr_hz = 0.0
-
-            collected_stats = dict(
-                  duration_sec = float(duration_sec),
-                  peak_abs = float(peak),
-                  mean_abs = float(mean_abs),
-                  rms = float(rms),
-                  zcr_hz = float(zcr_hz)
-            )
-
-            return collected_stats    

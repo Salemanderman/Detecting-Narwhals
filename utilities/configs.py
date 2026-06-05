@@ -39,13 +39,20 @@ def get_pipeline_config():
 
         # Shared parameters
         window_secs=5.0,
-        stride_secs=3.0,
-        mel_start=9,
+        stride_secs=5.0,
+        mel_start=11,
+        mel_end=None,   # None = all bins
         n_mels=128,
 
-        # PCA parameters
-        n_components=42,
-        pca_method="mean_std",
+        # Reduction parameters (shared)
+        reduction="pca",        # "pca" or "umap"
+        n_components=20,
+        # PCA-specific
+        pca_method="mean_std",  # "mean_std" | "full_window" | "mfcc"
+        # UMAP-specific
+        feature_mode="mfcc",    # "mean_std" | "mfcc" | "extended_acoustic" | "passthrough"
+        umap_n_neighbors=15,
+        umap_min_dist=0.1,
 
         # Outlier detection parameters
         distance_metric="mahalanobis",
@@ -55,7 +62,7 @@ def get_pipeline_config():
         skip_extraction=False,  # skip npz file extraction (use existing .npz files in output)
         skip_pca=False,  # skip PCA (use existing pca_results.npz in output)
         no_plot=False,  # skip plotting outliers (only save CSV)
-        no_audio_clips=False,  # skip saving audio clips for outliers (only save CSV)
+        no_audio_clips=True,   # skip saving audio clips for outliers (only save CSV)
 
         # Subset flag (for testing)
         subset_len=0,  # only process first n audio files

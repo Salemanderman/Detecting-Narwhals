@@ -32,7 +32,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 import sys
-from scipy.io import wavfile
+import torchaudio
 from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -235,16 +235,16 @@ def save_audio_clip(audio_path, start_sec, window_sec, save_path, crop_start_sec
         save_path: Path to save the output .wav file
         crop_start_secs: Seconds that were cut from the start of the recording during extraction
     """
-    sr, audio = wavfile.read(audio_path)
+    wf, sr = torchaudio.load(str(audio_path))
     start_sample = int((start_sec + crop_start_secs) * sr)
     end_sample = int(((start_sec + crop_start_secs) + window_sec) * sr)
 
     # Clamp to valid range
     start_sample = max(0, start_sample)
-    end_sample = min(len(audio), end_sample)
+    end_sample = min(wf.shape[-1], end_sample)
 
-    clip = audio[start_sample:end_sample]
-    wavfile.write(save_path, sr, clip)
+    clip = wf[:, start_sample:end_sample]
+    torchaudio.save(str(save_path), clip, sr)
 
 
 def main():

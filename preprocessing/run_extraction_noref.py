@@ -38,10 +38,18 @@ def _filter_by_length(dataset, start_secs, target_sr=64_000):
 
     lengths = {}
     for p in tqdm(files, desc="Scanning file lengths", unit="file", leave=False):
-        info = torchaudio.info(str(p))
-        total = int(info.num_frames / info.sample_rate * target_sr)
-        remaining = total - int(start_secs * target_sr)
-        lengths[str(p)] = max(0, round(remaining / target_sr) - 1) * target_sr  # same as AudioDataset
+        try:
+            info = torchaudio.info(str(p))
+        except Exception as e:
+            print(f"  [skip] {Path(p).name}: {e}")
+            continue
+        sr  = info.sample_rate
+        s   = int(start_secs * sr)
+        dur = max(0, round((info.num_frames - s) / sr) - 1) * sr  # same formula as AudioDataset
+        lengths[str(p)] = int(dur / sr * target_sr)
+
+    if not lengths:
+        raise RuntimeError(f"No audio files found under {base.root_dir}")
 
     mode_len = Counter(lengths.values()).most_common(1)[0][0]
     valid = {p for p, l in lengths.items() if l == mode_len}
@@ -64,7 +72,7 @@ def main():
     ap.add_argument("--audio-crop-start-secs", type=int, default=5, dest="audio_crop_start_secs", help="Seconds to cut from the start of each recording (default: 5).")
     ap.add_argument("--linear-freq", action="store_true", default=False, help="Use linear frequency scale instead of mel scale.")
     ap.add_argument("--n-mels", type=int, default=None, dest="n_mels", help="Number of mel bins (default: from config). Ignored if --linear-freq is set.")
-    ap.add_argument("--num-workers", type=int, default=4, dest="num_workers", help="DataLoader worker processes (default: 4, use 0 on Windows if errors occur).")
+    ap.add_argument("--num-workers", type=int, default=0, dest="num_workers", help="DataLoader worker processes (default: 4, use 0 on Windows if errors occur).")
     ap.add_argument("--batch-size", type=int, default=32, dest="batch_size", help="Files per GPU batch (default: 32).")
     args = ap.parse_args()
 
@@ -74,7 +82,7 @@ def main():
 
     start_secs = args.audio_crop_start_secs
     batch_size = args.batch_size
-    print(f" [info] cropping first {start_secs} s from start; snapping end to 1-second boundary.")
+    print(f" [info] cropping first {start_secs} s from start. snapping end to 1-second boundary.")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Input:  {audio_root}")

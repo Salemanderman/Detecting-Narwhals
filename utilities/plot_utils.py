@@ -43,32 +43,32 @@ def plot_pca_projection(X_pca, evr, window_meta, output_path):
     plt.close(fig)
 
 
+def plot_pca_projection_3d(X_pca, evr, window_meta, output_path):
+    """3-D scatter of the first three components, coloured by source file."""
+    if X_pca.shape[1] < 3:
+        return
 
-def plot_pca_projection_single(X_pca, evr, window_meta, output_path):
-    """
-    Plot PCA projection of windows colored by window for single file.
+    files        = [meta["file"] for meta in window_meta]
+    unique_files = sorted(set(files))
+    cmap         = plt.get_cmap("tab20", len(unique_files))
 
-    Args:
-        X_pca:      (n_windows, n_components) PCA-projected data
-        evr:        (n_components,) explained variance ratio
-        window_meta: List of dicts with 'file' key for each window
-        output_path: Path to save the plot PNG
-    """
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig = plt.figure(figsize=(9, 7))
+    ax  = fig.add_subplot(111, projection="3d")
 
-    source_file = window_meta[0]["file"] if window_meta else "Unknown"
-    n_windows = X_pca.shape[0]
-    print(f"shape of X_pca: {X_pca.shape}, n_windows: {n_windows}")
+    for idx, fname in enumerate(unique_files):
+        mask = [f == fname for f in files]
+        ax.scatter(X_pca[mask, 0], X_pca[mask, 1], X_pca[mask, 2],
+                   s=5, alpha=0.6, color=cmap(idx), label=fname)
 
-    cmap = plt.get_cmap("tab20", max(n_windows, 1))
-    ax.scatter(X_pca[:, 0], X_pca[:, 1], s=5, alpha=0.6,
-                         c=np.arange(n_windows), cmap=cmap, label=source_file)
+    if len(unique_files) <= 20:
+        ax.legend(markerscale=2, fontsize=6, loc="best")
 
     ax.set_xlabel(f"PC1 ({evr[0]*100:.1f}%)")
     ax.set_ylabel(f"PC2 ({evr[1]*100:.1f}%)")
-    ax.set_title("PCA Projection of 5-sec Windows of Log-Mel Features")
-    ax.legend(markerscale=2, fontsize=6, loc="best")
+    ax.set_zlabel(f"PC3 ({evr[2]*100:.1f}%)")
+    ax.set_title("PCA Projection — first 3 components")
 
-    output_path = Path(output_path)
-    fig.savefig(output_path)
+    fig.savefig(Path(output_path))
     plt.close(fig)
+
+

@@ -80,8 +80,12 @@ def main():
     ap.add_argument("--mel-start", type=int, default=cfg['mel_start'], help=f"First mel bin to include (default: {cfg['mel_start'] or 0}).")
     ap.add_argument("--mel-end", type=int, default=cfg['mel_end'], help=f"Last mel bin exclusive (default: {cfg['mel_end'] or 'all'}).")
     ap.add_argument("--n-mels", type=_int_or_none, default=cfg['n_mels'], help="Mel bins for extraction (None = linear STFT bins, int = mel-scale). PCA auto-detects from the produced NPZ files.")
-    ap.add_argument("--n-components", type=int, default=cfg['n_components'], help=f"Number of PCA components (default: {cfg['n_components']}).")
-    ap.add_argument("--pca-method", choices=["mean_std", "full_window"], default=cfg['pca_method'], help=f"Feature type for PCA (default: {cfg['pca_method']}).")
+    ap.add_argument("--n-components", type=int, default=cfg['n_components'], help=f"Number of components (default: {cfg['n_components']}).")
+    ap.add_argument("--reduction", choices=["pca", "umap"], default=cfg['reduction'], help="Dimensionality reduction method (default: pca).")
+    ap.add_argument("--pca-method", choices=["mean_std", "full_window", "mfcc"], default=cfg['pca_method'], help=f"Feature type for PCA (default: {cfg['pca_method']}).")
+    ap.add_argument("--feature-mode", choices=["mean_std", "mfcc", "extended_acoustic", "passthrough"], default=cfg['feature_mode'], help=f"Feature type for UMAP (default: {cfg['feature_mode']}).")
+    ap.add_argument("--umap-n-neighbors", type=int, default=cfg['umap_n_neighbors'], help=f"UMAP n_neighbors (default: {cfg['umap_n_neighbors']}).")
+    ap.add_argument("--umap-min-dist", type=float, default=cfg['umap_min_dist'], help=f"UMAP min_dist (default: {cfg['umap_min_dist']}).")
     ap.add_argument("--distance-metric", choices=["euclidean", "mahalanobis"], default=cfg['distance_metric'], help=f"Distance metric for outlier detection (default: {cfg['distance_metric']}).")
     ap.add_argument("--threshold-percentile", type=float, default=cfg['threshold_percentile'], help=f"Percentile cutoff for outlier threshold (default: {cfg['threshold_percentile']}).")
     ap.add_argument("--skip-extraction", action="store_true", default=cfg['skip_extraction'], help="Skip spectrogram extraction (use existing .npz files).")
@@ -92,7 +96,7 @@ def main():
     ap.add_argument("--towsey", action="store_true", default=False, help="Apply Towsey (2013) modal noise removal after spectrogram computation.")
     ap.add_argument("--towsey-N", type=float, default=0.0, dest="towsey_N", help="Towsey N: std devs above modal background added to threshold (default 0.0).")
     ap.add_argument("--audio-crop-start-secs", type=int, default=cfg.get('audio_crop_start_secs', 5), help="Seconds cut from the start of each recording during extraction (default: 5).")
-    ap.add_argument("--num-workers", type=int, default=4,  help="DataLoader worker processes for parallel file loading during extraction (default: 4, use 0 on Windows if errors occur).")
+    ap.add_argument("--num-workers", type=int, default=0,  help="DataLoader worker processes for extraction (default: 0, safe on all platforms).")
     ap.add_argument("--batch-size",  type=int, default=16, help="Files per GPU batch during extraction (default: 16, reduce if GPU runs out of memory).")
     
     args = ap.parse_args()
@@ -155,16 +159,31 @@ def main():
     else:
         print("\nSkipping spectrogram extraction (--skip-extraction)")
 
-    # Step 2: Run PCA
+    # Step 2: Embedding (PCA or UMAP)
     if not args.skip_pca:
-        cmd = [
-            sys.executable, "analysis/pca_sliding_window.py",
-            "--npz-root", str(npz_root),
-            "--output-root", str(pca_root),
-            "--window-secs", str(args.window_secs),
-            "--n-components", str(args.n_components),
-            "--pca-method", args.pca_method,
-        ]
+        if args.reduction == "umap":
+            cmd = [
+                sys.executable, "analysis/umap_embedding.py",
+                "--npz-root",    str(npz_root),
+                "--output-root", str(pca_root),
+                "--window-secs", str(args.window_secs),
+                "--n-components", str(args.n_components),
+                "--feature-mode", args.feature_mode,
+                "--n-neighbors",  str(args.umap_n_neighbors),
+                "--min-dist",     str(args.umap_min_dist),
+            ]
+            step_label = "UMAP Embedding"
+        else:
+            cmd = [
+                sys.executable, "analysis/pca_sliding_window.py",
+                "--npz-root",    str(npz_root),
+                "--output-root", str(pca_root),
+                "--window-secs", str(args.window_secs),
+                "--n-components", str(args.n_components),
+                "--pca-method",  args.pca_method,
+            ]
+            step_label = "PCA Analysis"
+
         if args.stride_secs is not None:
             cmd.extend(["--stride-secs", str(args.stride_secs)])
         if args.n_mels is not None:
@@ -177,18 +196,18 @@ def main():
             cmd.append("--no-plot")
 
         print(f"\n\n\n\n{'='*60}")
-        print(f"\nSTEP: PCA Analysis")
+        print(f"\nSTEP: {step_label}")
         print(f"{'='*60}")
         print(f"\nRunning: {' '.join(cmd)}\n")
 
         result = subprocess.run(cmd, cwd=Path(__file__).parent)
         if result.returncode != 0:
-            print(f"\nError: PCA Analysis failed with return code {result.returncode}")
+            print(f"\nError: {step_label} failed with return code {result.returncode}")
             sys.exit(result.returncode)
 
-        print(f"\n[Done] Completed: PCA Analysis")
+        print(f"\n[Done] Completed: {step_label}")
     else:
-        print("\nSkipping PCA (--skip-pca)")
+        print("\nSkipping embedding step (--skip-pca)")
 
     # Step 3: Find outliers
     cmd = [

@@ -5,7 +5,7 @@ Two modes:
   --outliers-csv   Cluster only the detected outliers from outliers.csv
   (omit)           Cluster every window in pca_results.npz
 
-Algorithms:  kmeans | gmm | agglomerative | hdbscan | optics
+Algorithms:  kmeans | hdbscan | dpmm
 
 Usage:
     # Cluster detected outliers
@@ -38,10 +38,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(CLUSTER_DIR))
 
 import utilities.configs as configs
-from clustering_core  import (NEEDS_K, compute_distances,
-                               run_clustering, compute_metrics, compute_validation_recall)
+from clustering_core  import (NEEDS_K, run_clustering, compute_metrics, compute_validation_recall)
 from clustering_plots import (plot_clusters, plot_cluster_sizes, plot_silhouette,
-                               plot_distance_boxplot, plot_recorder_distribution,
+                               plot_recorder_distribution,
                                plot_validation_recall, save_cluster_grid)
 
 
@@ -55,10 +54,10 @@ def main():
                     help="If given, cluster only these detected outliers; "
                          "if omitted, cluster every window in pca_results.npz")
     ap.add_argument("--npz-root",     default=None,
-                    help="Spectrogram .npz directory (needed for grids and acoustic features)")
+                    help="Spectrogram .npz directory (needed for spectrogram grid plots)")
     # Algorithm
     ap.add_argument("--algorithm",   default="kmeans",
-                    choices=["kmeans", "gmm", "agglomerative", "hdbscan", "optics", "dpmm"])
+                    choices=["kmeans", "hdbscan", "dpmm"])
     ap.add_argument("--n-clusters",  type=int, default=5)
     ap.add_argument("--cluster-dims", type=int, default=10,
                     help="PCA dimensions to use for clustering (default: 10)")
@@ -72,6 +71,8 @@ def main():
     # Spectrogram grids
     ap.add_argument("--page-size", type=int, default=30,
                     help="Spectrograms per grid page — all windows are saved across as many pages as needed (default: 30)")
+    ap.add_argument("--n-cols", type=int, default=None,
+                    help="Columns per row in spectrogram grid plots (default: 6)")
     # Spectrogram
     ap.add_argument("--mel-start",   type=int,   default=None)
     ap.add_argument("--mel-end",     type=int,   default=None)
@@ -82,6 +83,9 @@ def main():
     ap.add_argument("--tolerance",   type=float, default=5.0)
     ap.add_argument("--no-plot", action="store_true", default=False)
     args = ap.parse_args()
+
+    # High-level progress tracker for long runs.
+    progress = tqdm(total=6, desc="Clustering pipeline", unit="step")
 
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
@@ -94,36 +98,46 @@ def main():
         raise FileNotFoundError(f"pca_results.npz not found in {args.pca_root}")
     pca_data = np.load(pca_file, allow_pickle=True)
     X_pca = pca_data["X_pca"]
+    progress.update(1)
 
     # ── Build DataFrame ──────────────────────────────────────────────────────
+    window_files  = np.array(pca_data["window_files"], dtype=str)
+    window_secs   = pca_data["window_start_secs"].astype(float)
+    window_frames = pca_data["window_start_frames"].astype(int)
+
     if args.outliers_csv:
-        df      = pd.read_csv(args.outliers_csv)
-        if "Index" not in df.columns:
-            raise ValueError("outliers.csv must have an 'Index' column.")
-        indices = df["Index"].to_numpy(dtype=int)
-        out_csv = "clusters.csv"
-        mode    = "outliers"
-        print(f"Mode: outliers ({len(df)} windows from {args.outliers_csv})")
+        df = pd.read_csv(args.outliers_csv)
+        indices    = []
+        keep_rows  = []
+        for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="Matching outliers", unit="row")):
+            mask = (window_files == str(row["File"])) & \
+                   (np.abs(window_secs - float(row["Start Time (s)"])) < 0.01)
+            hits = np.where(mask)[0]
+            if len(hits):
+                indices.append(hits[0])
+                keep_rows.append(i)
+        skipped = len(df) - len(indices)
+        if skipped:
+            print(f"  [warn] {skipped} rows in outliers CSV not found in pca_results — skipped")
+        indices = np.array(indices, dtype=int)
+        df      = df.iloc[keep_rows].reset_index(drop=True)
+        print(f"Mode: outliers ({len(indices)} windows from {args.outliers_csv})")
     else:
-        window_files  = np.array(pca_data["window_files"], dtype=str)
-        window_secs   = pca_data["window_start_secs"].astype(float)
-        window_frames = pca_data["window_start_frames"].astype(int)
         indices = np.arange(len(X_pca))
-        distances = compute_distances(X_pca, "euclidean")
         df = pd.DataFrame({
             "File":           window_files,
             "Start Frame":    window_frames,
             "Start Time (s)": window_secs,
             "PC1":            X_pca[:, 0],
             "PC2":            X_pca[:, 1] if X_pca.shape[1] > 1 else 0.0,
-            "Distance":       distances,
         })
-        out_csv = "clusters.csv"
-        mode    = "all_windows"
         print(f"Mode: all windows ({len(df)} windows from pca_results.npz)")
+    progress.update(1)
+
+    out_csv = "clusters.csv"
 
     n = len(df)
-    if args.algorithm in NEEDS_K and args.algorithm != "dpmm" and n < args.n_clusters:
+    if args.algorithm in NEEDS_K and n < args.n_clusters:
         raise ValueError(f"Fewer windows ({n}) than clusters ({args.n_clusters}).")
 
     # ── Build feature matrix ─────────────────────────────────────────────────
@@ -132,12 +146,14 @@ def main():
     feature_desc = f"pca({dims})"
 
     X_norm = StandardScaler().fit_transform(X_feat)
+    progress.update(1)
 
     # ── Cluster ──────────────────────────────────────────────────────────────
     print(f"\nClustering {n} windows  features={feature_desc}  algorithm={args.algorithm}  k={args.n_clusters}")
     labels  = run_clustering(X_norm, args)
     k       = int(labels.max()) + 1
     n_noise = int((labels == -1).sum())
+    progress.update(1)
 
     for j in range(k):
         c = int((labels == j).sum())
@@ -157,14 +173,11 @@ def main():
     df.to_csv(output_root / out_csv, index=False)
     print(f"\n[csv] {output_root / out_csv}")
 
-    summary = (df.groupby("cluster")
-                 .agg(count=("cluster", "count"),
-                      mean_distance=("Distance", "mean"),
-                      max_distance=("Distance", "max"))
-                 .reset_index())
+    summary = df.groupby("cluster").agg(count=("cluster", "count")).reset_index()
     summary.to_csv(output_root / "cluster_summary.csv", index=False)
     pd.DataFrame([metrics]).to_csv(output_root / "metrics.csv", index=False)
     print(f"\n{summary.to_string(index=False)}")
+    progress.update(1)
 
     # ── Plots ────────────────────────────────────────────────────────────────
     if not args.no_plot:
@@ -172,8 +185,7 @@ def main():
         plot_clusters(X_pca[indices, :2], labels, k, args.algorithm,
                       output_root / "cluster_scatter.png", n_total=n)
         plot_cluster_sizes(labels, k, output_root / "cluster_sizes.png")
-        plot_distance_boxplot(df, k, output_root / "distance_boxplot.png")
-        if mode == "all_windows":
+        if not args.outliers_csv:
             plot_recorder_distribution(df, k, output_root / "recorder_distribution.png")
         if labeled.sum() > k > 1:
             plot_silhouette(X_norm, labels, k, output_root / "silhouette.png")
@@ -211,8 +223,11 @@ def main():
                     j, npz_root, wf_frames, spec_cfg,
                     cluster_dir / "spectrogram_grid.png",
                     mel_start=args.mel_start, mel_end=args.mel_end,
-                    page_size=args.page_size,
+                    page_size=args.page_size, n_cols=args.n_cols,
                 )
+
+    progress.update(1)
+    progress.close()
 
     print(f"\n[done] {output_root}")
 

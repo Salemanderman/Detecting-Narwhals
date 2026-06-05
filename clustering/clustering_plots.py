@@ -196,7 +196,7 @@ def plot_elbow(X_norm, max_k, seed, n_init, save_path):
 
 
 def save_cluster_grid(cluster_df, cluster_id, npz_root, window_frames, spec_cfg,
-                      save_path, mel_start=None, mel_end=None, page_size=30):
+                      save_path, mel_start=None, mel_end=None, page_size=30, n_cols=None):
     """Save all windows in a cluster as paginated spectrogram grids.
 
     Single page  → spectrogram_grid.png
@@ -207,14 +207,14 @@ def save_cluster_grid(cluster_df, cluster_id, npz_root, window_frames, spec_cfg,
         return
 
     save_path  = Path(save_path)
-    sorted_df  = cluster_df.sort_values("Distance", ascending=False)
+    sorted_df  = cluster_df
     n_pages    = max(1, (n + page_size - 1) // page_size)
     label      = "Noise" if cluster_id == -1 else f"Cluster {cluster_id}"
 
     for page in range(n_pages):
         page_df = sorted_df.iloc[page * page_size : (page + 1) * page_size]
         n_show  = len(page_df)
-        n_cols  = min(6, n_show)
+        n_cols  = min(n_cols if n_cols else 6, n_show)
         n_rows  = (n_show + n_cols - 1) // n_cols
 
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows))
@@ -226,7 +226,7 @@ def save_cluster_grid(cluster_df, cluster_id, npz_root, window_frames, spec_cfg,
                 w = futils.get_window(npz_root / row["File"], t, window_frames,
                                       mel_start=mel_start, mel_end=mel_end, spec_cfg=spec_cfg)
                 ax.imshow(w, aspect="auto", origin="lower", cmap="viridis")
-                ax.set_title(f"{Path(row['File']).stem[:18]}\nt={t:.1f}s  d={row['Distance']:.2f}",
+                ax.set_title(f"{Path(row['File']).stem[:18]}\nt={t:.1f}s",
                              fontsize=8)
             except Exception as e:
                 ax.set_title(f"Error: {e}", fontsize=7)
