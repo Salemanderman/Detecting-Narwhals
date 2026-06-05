@@ -96,7 +96,7 @@ def main():
     ap.add_argument("--towsey", action="store_true", default=False, help="Apply Towsey (2013) modal noise removal after spectrogram computation.")
     ap.add_argument("--towsey-N", type=float, default=0.0, dest="towsey_N", help="Towsey N: std devs above modal background added to threshold (default 0.0).")
     ap.add_argument("--audio-crop-start-secs", type=int, default=cfg.get('audio_crop_start_secs', 5), help="Seconds cut from the start of each recording during extraction (default: 5).")
-    ap.add_argument("--num-workers", type=int, default=4,  help="DataLoader worker processes for parallel file loading during extraction (default: 4, use 0 on Windows if errors occur).")
+    ap.add_argument("--num-workers", type=int, default=0,  help="DataLoader worker processes for extraction (default: 0, safe on all platforms).")
     ap.add_argument("--batch-size",  type=int, default=16, help="Files per GPU batch during extraction (default: 16, reduce if GPU runs out of memory).")
     
     args = ap.parse_args()

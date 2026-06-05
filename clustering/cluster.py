@@ -54,7 +54,7 @@ def main():
                     help="If given, cluster only these detected outliers; "
                          "if omitted, cluster every window in pca_results.npz")
     ap.add_argument("--npz-root",     default=None,
-                    help="Spectrogram .npz directory (needed for grids and acoustic features)")
+                    help="Spectrogram .npz directory (needed for spectrogram grid plots)")
     # Algorithm
     ap.add_argument("--algorithm",   default="kmeans",
                     choices=["kmeans", "hdbscan", "dpmm"])
@@ -71,6 +71,8 @@ def main():
     # Spectrogram grids
     ap.add_argument("--page-size", type=int, default=30,
                     help="Spectrograms per grid page — all windows are saved across as many pages as needed (default: 30)")
+    ap.add_argument("--n-cols", type=int, default=None,
+                    help="Columns per row in spectrogram grid plots (default: 6)")
     # Spectrogram
     ap.add_argument("--mel-start",   type=int,   default=None)
     ap.add_argument("--mel-end",     type=int,   default=None)
@@ -221,7 +223,7 @@ def main():
                     j, npz_root, wf_frames, spec_cfg,
                     cluster_dir / "spectrogram_grid.png",
                     mel_start=args.mel_start, mel_end=args.mel_end,
-                    page_size=args.page_size,
+                    page_size=args.page_size, n_cols=args.n_cols,
                 )
 
     progress.update(1)

@@ -48,7 +48,7 @@ sys.path.insert(0, str(ROOT))
 import utilities.configs as configs
 import utilities.feature_utils as futils
 import utilities.plot_utils as putils
-from clustering.clustering_core import acoustic_features_extended, mfcc_features
+from clustering.clustering_core import mfcc_features
 
 
 def _int_or_none(v):
@@ -81,7 +81,7 @@ def main():
     ap.add_argument("--n-mfcc",       type=int, default=20,
                     help="Number of MFCC coefficients (only used when --feature-mode mfcc, default: 20).")
     ap.add_argument("--feature-mode",
-                    choices=["mean_std", "extended_acoustic", "mfcc", "passthrough"],
+                    choices=["mean_std", "mfcc", "passthrough"],
                     default="mean_std")
     ap.add_argument("--filter-csv",   default=None,
                     help="Only embed windows listed in this CSV (File + Start Time (s)).")
@@ -143,8 +143,6 @@ def main():
             start_sec = round(start_frame * secs_per_frame, 3)
             if filter_set and (npz_path.name, start_sec) not in filter_set:
                 continue
-            if args.feature_mode == "extended_acoustic":
-                feat = acoustic_features_extended(win)
             elif args.feature_mode == "mfcc":
                 feat = mfcc_features(win, n_mfcc=args.n_mfcc)
             elif args.feature_mode == "passthrough":

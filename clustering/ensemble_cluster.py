@@ -41,8 +41,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(CLUSTER_DIR))
 
 import utilities.configs as configs
-from clustering_core  import (compute_distances,
-                               compute_metrics, compute_validation_recall)
+from clustering_core  import (compute_metrics, compute_validation_recall)
 from clustering_plots import (plot_clusters, plot_cluster_sizes, plot_silhouette,
                                plot_distance_boxplot, plot_recorder_distribution,
                                plot_validation_recall, plot_coassociation_heatmap,
@@ -153,9 +152,6 @@ def main():
                     help="HDBSCAN min_cluster_size (default: 5)")
     ap.add_argument("--min-samples",      type=int, default=None,
                     help="HDBSCAN min_samples (default: same as min-cluster-size)")
-    # All-windows extras
-    ap.add_argument("--distance-metric", choices=["euclidean", "mahalanobis"],
-                    default="euclidean")
     # Spectrogram
     ap.add_argument("--mel-start",   type=int,   default=None)
     ap.add_argument("--mel-end",     type=int,   default=None)
@@ -195,15 +191,12 @@ def main():
         window_secs   = pca_data["window_start_secs"].astype(float)
         window_frames = pca_data["window_start_frames"].astype(int)
         indices = np.arange(len(X_pca))
-        print(f"Computing {args.distance_metric} distances for {len(X_pca)} windows...")
-        distances = compute_distances(X_pca, args.distance_metric)
         df = pd.DataFrame({
             "File":           window_files,
             "Start Frame":    window_frames,
             "Start Time (s)": window_secs,
             "PC1":            X_pca[:, 0],
             "PC2":            X_pca[:, 1] if X_pca.shape[1] > 1 else 0.0,
-            "Distance":       distances,
         })
         out_csv = "clusters.csv"
         mode    = "all_windows"

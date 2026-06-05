@@ -196,7 +196,7 @@ def plot_elbow(X_norm, max_k, seed, n_init, save_path):
 
 
 def save_cluster_grid(cluster_df, cluster_id, npz_root, window_frames, spec_cfg,
-                      save_path, mel_start=None, mel_end=None, page_size=30):
+                      save_path, mel_start=None, mel_end=None, page_size=30, n_cols=None):
     """Save all windows in a cluster as paginated spectrogram grids.
 
     Single page  → spectrogram_grid.png
@@ -214,7 +214,7 @@ def save_cluster_grid(cluster_df, cluster_id, npz_root, window_frames, spec_cfg,
     for page in range(n_pages):
         page_df = sorted_df.iloc[page * page_size : (page + 1) * page_size]
         n_show  = len(page_df)
-        n_cols  = min(6, n_show)
+        n_cols  = min(n_cols if n_cols else 6, n_show)
         n_rows  = (n_show + n_cols - 1) // n_cols
 
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows))

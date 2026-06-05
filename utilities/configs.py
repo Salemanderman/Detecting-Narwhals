@@ -39,14 +39,14 @@ def get_pipeline_config():
 
         # Shared parameters
         window_secs=5.0,
-        stride_secs=3.0,
-        mel_start=9,
+        stride_secs=5.0,
+        mel_start=11,
         mel_end=None,   # None = all bins
         n_mels=128,
 
         # Reduction parameters (shared)
         reduction="pca",        # "pca" or "umap"
-        n_components=42,
+        n_components=20,
         # PCA-specific
         pca_method="mean_std",  # "mean_std" | "full_window" | "mfcc"
         # UMAP-specific
