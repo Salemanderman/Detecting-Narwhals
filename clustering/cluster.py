@@ -74,7 +74,7 @@ def main():
     ap.add_argument("--n-cols", type=int, default=None,
                     help="Columns per row in spectrogram grid plots (default: 6)")
     # Spectrogram
-    ap.add_argument("--mel-start",   type=int,   default=None)
+    ap.add_argument("--mel-start",   type=int,   default=11)
     ap.add_argument("--mel-end",     type=int,   default=None)
     ap.add_argument("--window-secs", type=float, default=5.0)
     # Validation

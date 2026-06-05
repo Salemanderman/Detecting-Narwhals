@@ -153,7 +153,7 @@ def main():
     ap.add_argument("--min-samples",      type=int, default=None,
                     help="HDBSCAN min_samples (default: same as min-cluster-size)")
     # Spectrogram
-    ap.add_argument("--mel-start",   type=int,   default=None)
+    ap.add_argument("--mel-start",   type=int,   default=11)
     ap.add_argument("--mel-end",     type=int,   default=None)
     ap.add_argument("--window-secs", type=float, default=5.0)
     ap.add_argument("--page-size", type=int, default=30,

@@ -257,8 +257,8 @@ def main():
                     help="Percentile cutoff — flag top (100-p)%% most anomalous windows (default: 95.0).")
     ap.add_argument("--window-secs", type=float, default=5.0,
                     help="Window length in seconds for spectrogram plots (default: 5.0).")
-    ap.add_argument("--mel-start", type=int, default=None,
-                    help="First mel bin to include in spectrogram plots (default: 0).")
+    ap.add_argument("--mel-start", type=int, default=11,
+                    help="First mel bin to include in spectrogram plots (default: 11).")
     ap.add_argument("--mel-end", type=int, default=None,
                     help="Last mel bin (exclusive) to include in spectrogram plots (default: all).")
     ap.add_argument("--save-csv", action="store_true",
