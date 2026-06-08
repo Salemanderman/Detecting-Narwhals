@@ -99,12 +99,17 @@ def main():
                     help="Windows per grid page (default: 30)")
     ap.add_argument("--min-confidence", type=float, default=0.0,
                     help="Only show windows at or above this confidence (default: 0.0 = all)")
+    ap.add_argument("--types", nargs="*", default=None,
+                    help="Which predicted types to plot (e.g. --types clicks tonal). "
+                         "Omit to plot all types. Use --list-types to see what exists.")
+    ap.add_argument("--list-types", action="store_true",
+                    help="Print available types in the CSV and exit without plotting.")
     args = ap.parse_args()
 
     df = pd.read_csv(args.classified_csv)
     if "predicted_type" not in df.columns or "type_confidence" not in df.columns:
         print("[error] CSV must have predicted_type and type_confidence columns.")
-        print("  Run analysis/classify_windows.py first.")
+        print("  Run clustering/classify_windows.py first.")
         sys.exit(1)
 
     if args.min_confidence > 0:
@@ -113,17 +118,33 @@ def main():
         print(f"Windows below confidence {args.min_confidence:.0%} "
               f"→ 'uncertain'  ({low_conf.sum()} windows)")
 
+    all_types = sorted(df["predicted_type"].unique())
+    print(f"\nType distribution:")
+    for t in all_types:
+        sub       = df[df["predicted_type"] == t]
+        mean_conf = sub["type_confidence"].mean()
+        print(f"  {t:14s}  {len(sub):5d} windows  mean_conf={mean_conf:.2f}")
+
+    if args.list_types:
+        sys.exit(0)
+
+    if args.types is not None:
+        unknown = [t for t in args.types if t not in all_types]
+        if unknown:
+            print(f"\n[warn] requested types not found in CSV: {unknown}")
+            print(f"  available: {all_types}")
+        types = [t for t in args.types if t in all_types]
+        if not types:
+            print("[error] no valid types to plot after filtering.")
+            sys.exit(1)
+        print(f"\nPlotting {len(types)}/{len(all_types)} type(s): {types}")
+    else:
+        types = all_types
+
     spec_cfg      = configs.get_specgram_config()
     window_frames = round(args.window_secs * spec_cfg["sample_rate"] / spec_cfg["hop_length"])
     npz_root      = Path(args.npz_root)
     output_root   = Path(args.output_root)
-
-    types = sorted(df["predicted_type"].unique())
-    print(f"\nType distribution:")
-    for t in types:
-        sub       = df[df["predicted_type"] == t]
-        mean_conf = sub["type_confidence"].mean()
-        print(f"  {t:14s}  {len(sub):5d} windows  mean_conf={mean_conf:.2f}")
 
     print(f"\nSaving grids to {output_root} ...")
     for t in tqdm(types, desc="Saving grids", unit="type"):
