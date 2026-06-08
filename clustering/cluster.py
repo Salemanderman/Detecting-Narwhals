@@ -59,8 +59,8 @@ def main():
     ap.add_argument("--algorithm",   default="kmeans",
                     choices=["kmeans", "hdbscan", "dpmm"])
     ap.add_argument("--n-clusters",  type=int, default=5)
-    ap.add_argument("--cluster-dims", type=int, default=10,
-                    help="PCA dimensions to use for clustering (default: 10)")
+    ap.add_argument("--cluster-dims", type=int, default=20,
+                    help="PCA dimensions to use for clustering (default: 20)")
     ap.add_argument("--seed",         type=int, default=42)
     ap.add_argument("--min-cluster-size",    type=int,   default=10)
     ap.add_argument("--min-samples",         type=int,   default=None)

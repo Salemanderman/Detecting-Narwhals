@@ -18,6 +18,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -34,35 +35,43 @@ def build_npz_index(npz_root: Path) -> dict[str, Path]:
 
 def predict_windows(df: pd.DataFrame, npz_index: dict, payload: dict) -> pd.DataFrame:
     """Add predicted_type and type_confidence columns to df. Returns a copy."""
-    spec_cfg      = configs.get_specgram_config()
-    window_frames = round(payload["window_secs"] * spec_cfg["sample_rate"] / spec_cfg["hop_length"])
-    mel_start     = payload["mel_start"]
-    mel_end       = payload["mel_end"]
-    n_mfcc        = payload["n_mfcc"]
-    model         = payload["model"]
+    spec_cfg       = configs.get_specgram_config()
+    secs_per_frame = spec_cfg["hop_length"] / spec_cfg["sample_rate"]
+    window_frames  = round(payload["window_secs"] * spec_cfg["sample_rate"] / spec_cfg["hop_length"])
+    mel_start      = payload["mel_start"]
+    mel_end        = payload["mel_end"]
+    n_mfcc         = payload["n_mfcc"]
+    model          = payload["model"]
 
-    pred_types  = []
-    pred_confs  = []
+    pred_types = ["unknown"] * len(df)
+    pred_confs = [0.0]       * len(df)
 
-    for _, row in df.iterrows():
-        npz_path = npz_index.get(row["File"])
+    # Group by file so each NPZ is loaded once instead of once per window.
+    for npz_name, group in tqdm(df.groupby("File"), desc="Classifying", unit="file"):
+        npz_path = npz_index.get(npz_name)
         if npz_path is None:
-            pred_types.append("unknown")
-            pred_confs.append(0.0)
             continue
         try:
-            win  = futils.get_window(npz_path, float(row["Start Time (s)"]),
-                                     window_frames, mel_start, mel_end, spec_cfg)
-            feat = mfcc_features(win, n_mfcc=n_mfcc).reshape(1, -1)
-            pred_types.append(model.predict(feat)[0])
-            pred_confs.append(float(model.predict_proba(feat).max()))
-        except Exception:
-            pred_types.append("unknown")
-            pred_confs.append(0.0)
+            S, _ = futils.load_spectrogram(npz_path, n_mels=None)
+            n_bins, T = S.shape
+            mel_e  = mel_end if mel_end else n_bins
+            S_crop = S[mel_start:mel_e, :]
+
+            for idx, row in group.iterrows():
+                start_frame = round(float(row["Start Time (s)"]) / secs_per_frame)
+                end_frame   = min(start_frame + window_frames, T)
+                win = S_crop[:, start_frame:end_frame]
+                if win.shape[1] < window_frames:
+                    continue
+                feat = mfcc_features(win, n_mfcc=n_mfcc).reshape(1, -1)
+                pred_types[idx] = model.predict(feat)[0]
+                pred_confs[idx] = float(model.predict_proba(feat).max())
+        except Exception as e:
+            tqdm.write(f"  [warn] {npz_name}: {e}")
 
     out = df.copy()
-    out["predicted_type"]       = pred_types
-    out["type_confidence"]      = pred_confs
+    out["predicted_type"]  = pred_types
+    out["type_confidence"] = pred_confs
     return out
 
 

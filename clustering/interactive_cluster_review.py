@@ -89,10 +89,12 @@ def load_clusters_csv(clusters_dir: Path) -> pd.DataFrame:
     return pd.read_csv(p)
 
 
-def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int) -> tuple[dict, dict]:
+def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
+                session_labels: set) -> tuple[dict, dict]:
     cluster_ids = sorted(df['cluster'].unique())
     n_total     = len(df)
     type_keys   = ' / '.join(TYPE_MAP.keys())
+    custom_keys = ' / '.join(sorted(session_labels)) if session_labels else ''
 
     print(f"\nPass {pass_n}  —  {len(cluster_ids)} clusters  {n_total} windows")
     for c in cluster_ids:
@@ -100,7 +102,10 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int) -> tuple[dict
         name = "Noise" if c == -1 else f"Cluster {c}"
         print(f"  {name}: {n} windows")
 
-    print(f"\nLabels: [k]eep  [r]emove  or type name ({type_keys})")
+    label_hint = type_keys
+    if custom_keys:
+        label_hint += f"  |  custom: {custom_keys}"
+    print(f"\nLabels: [k]eep  [r]emove  or type name ({label_hint}) then choose keep/remove")
     print("Nav:    Enter=advance (keep)  b=back  d=done (keep rest)  <number>=jump  n/p=page  ?=help\n")
 
     labels: dict[int, str] = {}
@@ -151,7 +156,8 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int) -> tuple[dict
 
             elif raw == '?':
                 print("  k=keep  r=remove  Enter=confirm/advance (default: keep)")
-                print(f"  type name = keep + tag: {type_keys}")
+                print(f"  type name ({type_keys}) = label cluster, then prompted for keep/remove")
+                print("  any other text = custom label (remembered for this session)")
                 print("  b=back  d=done (keep rest)  n/p=page  <number>=jump")
 
             elif raw == 'b':
@@ -176,10 +182,16 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int) -> tuple[dict
                 break
 
             elif raw in TYPE_MAP:
-                action    = 'remove' if raw in REMOVE_TYPES else 'keep'
-                labels[c] = action
-                types[c]  = TYPE_MAP[raw]
-                print(f"  {action}  [{TYPE_MAP[raw]}]")
+                types[c] = TYPE_MAP[raw]
+                default   = 'remove' if raw in REMOVE_TYPES else 'keep'
+                kr = input(f"  labelled [{TYPE_MAP[raw]}] — keep or remove? ([{default[0]}]/{'r' if default == 'keep' else 'k'}): ").strip().lower()
+                if kr == 'k':
+                    labels[c] = 'keep'
+                elif kr == 'r':
+                    labels[c] = 'remove'
+                else:
+                    labels[c] = default
+                print(f"  {labels[c]}  [{TYPE_MAP[raw]}]")
                 idx += 1
                 break
 
@@ -192,7 +204,14 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int) -> tuple[dict
                     print(f"  cluster {target} not found. Available: {cluster_ids}")
 
             else:
-                print(f"  unknown: '{raw}'. Type ? for help.")
+                # treat as free-text label
+                types[c] = raw
+                session_labels.add(raw)
+                kr = input(f"  labelled [{raw}] — keep or remove? ([k]/r): ").strip().lower()
+                labels[c] = 'remove' if kr == 'r' else 'keep'
+                print(f"  {labels[c]}  [{raw}]")
+                idx += 1
+                break
 
     return labels, types
 
@@ -431,8 +450,8 @@ def main():
                     help="k for kmeans (default: 10)")
     # Type annotation output
     ap.add_argument('--type-annotations-csv',
-                    default=str(ROOT / 'evaluation' / 'type_annotations.csv'),
-                    help="Central CSV for accumulated type labels (default: evaluation/type_annotations.csv)")
+                    default=None,
+                    help="CSV for accumulated type labels (default: <output-root>/type_annotations.csv)")
     # HDBSCAN params
     ap.add_argument('--min-cluster-size', type=int, default=8)
     ap.add_argument('--min-samples',      type=int, default=None)
@@ -457,6 +476,9 @@ def main():
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
+    if args.type_annotations_csv is None:
+        args.type_annotations_csv = str(output_root / 'type_annotations.csv')
+
     print(f"output: {output_root}")
     print(f"npz:    {args.npz_root}")
 
@@ -467,7 +489,8 @@ def main():
         sys.exit(1)
     current_clusters_dir = init_clusters_dir
 
-    pass_n = 1
+    pass_n       = 1
+    session_labels: set = set()
 
     while True:
         # Load current clusters
@@ -479,7 +502,7 @@ def main():
 
         print(f"\nLoaded {len(df)} windows from {current_clusters_dir}")
 
-        labels, types = review_pass(df, current_clusters_dir, pass_n)
+        labels, types = review_pass(df, current_clusters_dir, pass_n, session_labels)
 
         # Summary
         show_summary(labels, types, df)

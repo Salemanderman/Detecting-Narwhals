@@ -29,8 +29,8 @@
 !analysis/autoencoder_results/evaluation_set
 !analysis/autoencoder_results/towsey_n0.5/
 !analysis/autoencoder_results/towsey_n0.5/evaluation_set.csv
-
 !analysis/autoencoder_results/towsey_n0.5/evaluation_set
+!analysis/calculate_mean_values_spectrogram.ipynb
 
 !evaluation
 !evaluation/validatedChristerCalls.csv
