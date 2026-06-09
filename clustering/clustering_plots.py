@@ -98,24 +98,6 @@ def plot_silhouette(X_norm, labels, k, save_path):
     print(f"[plot] {save_path}")
 
 
-def plot_distance_boxplot(df, k, save_path):
-    clusters = list(range(k)) + ([-1] if (df["cluster"] == -1).any() else [])
-    data     = [df.loc[df["cluster"] == j, "Distance"].values for j in clusters]
-    xlabels  = [f"C{j}" if j >= 0 else "Noise" for j in clusters]
-
-    fig, ax = plt.subplots(figsize=(max(6, len(clusters) * 1.2), 5))
-    ax.boxplot(data, tick_labels=xlabels, patch_artist=True,
-               boxprops=dict(facecolor="steelblue", alpha=0.6),
-               medianprops=dict(color="red", linewidth=2))
-    ax.set_xlabel("Cluster", fontsize=12)
-    ax.set_ylabel("Distance from PCA centroid", fontsize=12)
-    ax.set_title("Outlier distance distribution per cluster", fontsize=13, fontweight="bold")
-    ax.grid(True, axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"[plot] {save_path}")
-
 
 def plot_recorder_distribution(df, k, save_path):
     df = df.copy()
@@ -249,38 +231,3 @@ def save_cluster_grid(cluster_df, cluster_id, npz_root, window_frames, spec_cfg,
         plt.savefig(out_path, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
-
-def plot_coassociation_heatmap(C: np.ndarray, labels: np.ndarray, save_path):
-    """Heatmap of the co-association matrix, rows/cols sorted by final cluster label."""
-    # Sort by label so clusters appear as bright blocks on the diagonal
-    order         = np.argsort(labels)
-    C_sorted      = C[np.ix_(order, order)]
-    sorted_labels = labels[order]
-
-    fig, ax = plt.subplots(figsize=(8, 7))
-    im = ax.imshow(C_sorted, aspect="auto", cmap="viridis", vmin=0, vmax=1,
-                   interpolation="nearest")
-    fig.colorbar(im, ax=ax, label="Co-occurrence fraction  (1 = always together)")
-
-    # Red boundary lines between clusters
-    for j in sorted(set(sorted_labels)):
-        positions = np.where(sorted_labels == j)[0]
-        boundary  = positions[-1] + 0.5
-        ax.axhline(boundary, color="red", linewidth=0.8, alpha=0.7)
-        ax.axvline(boundary, color="red", linewidth=0.8, alpha=0.7)
-        mid = positions.mean()
-        lbl = "N" if j == -1 else str(j)
-        ax.text(mid, -1.5, lbl, ha="center", va="bottom", fontsize=8,
-                color="red", fontweight="bold")
-
-    ax.set_title("Co-association matrix  (sorted by final cluster)\n"
-                 "Bright diagonal blocks = stable clusters across ensemble runs",
-                 fontsize=11, fontweight="bold")
-    ax.set_xlabel("Window index  (sorted)", fontsize=10)
-    ax.set_ylabel("Window index  (sorted)", fontsize=10)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"[plot] {save_path}")

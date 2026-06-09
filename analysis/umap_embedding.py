@@ -5,10 +5,8 @@ Writes pca_results.npz with the same keys so cluster.py, finding_outliers.py,
 and ensemble_cluster.py all work unchanged.
 
 Feature modes:
-  mean_std          — mean + std per mel bin
-  mfcc              — 2*n_mfcc MFCC coefficients (mean + std)
-  extended_acoustic — 31 acoustic features (spectral + temporal)
-  passthrough       — no reduction, raw normalised features as-is
+  mean_std  — mean + std per mel bin
+  mfcc      — 2*n_mfcc MFCC coefficients (mean + std)
 
 Iterative clustering: use --filter-csv to re-embed only a subset of windows
 (e.g. pass the narwhal cluster CSV to re-run UMAP on just those windows).
@@ -81,7 +79,7 @@ def main():
     ap.add_argument("--n-mfcc",       type=int, default=20,
                     help="Number of MFCC coefficients (only used when --feature-mode mfcc, default: 20).")
     ap.add_argument("--feature-mode",
-                    choices=["mean_std", "mfcc", "passthrough"],
+                    choices=["mean_std", "mfcc"],
                     default="mean_std")
     ap.add_argument("--filter-csv",   default=None,
                     help="Only embed windows listed in this CSV (File + Start Time (s)).")
@@ -145,8 +143,6 @@ def main():
                 continue
             elif args.feature_mode == "mfcc":
                 feat = mfcc_features(win, n_mfcc=args.n_mfcc)
-            elif args.feature_mode == "passthrough":
-                feat = window_feature(win)
             else:
                 feat = window_feature(win)
             feature_rows.append(feat)
@@ -168,20 +164,16 @@ def main():
     norm_std  = np.where(norm_std > 0, norm_std, 1.0)
     X_norm    = (X - norm_mean) / norm_std
 
-    if args.feature_mode == "passthrough":
-        print("Skipping reduction — using normalised features directly.")
-        X_umap = X_norm
-    else:
-        print("Fitting UMAP...")
-        reducer = umap.UMAP(
-            n_components=args.n_components,
-            n_neighbors=args.n_neighbors,
-            min_dist=args.min_dist,
-            metric=args.metric,
-            random_state=args.seed,
-            verbose=False,
-        )
-        X_umap = reducer.fit_transform(X_norm)
+    print("Fitting UMAP...")
+    reducer = umap.UMAP(
+        n_components=args.n_components,
+        n_neighbors=args.n_neighbors,
+        min_dist=args.min_dist,
+        metric=args.metric,
+        random_state=args.seed,
+        verbose=False,
+    )
+    X_umap = reducer.fit_transform(X_norm)
     print(f"Embedding shape: {X_umap.shape}")
 
     files_arr  = np.array([w["file"]        for w in window_meta], dtype=object)
@@ -214,14 +206,9 @@ def main():
     if not args.no_plot:
         plot_path = output_root / "umap_plot.png"
         evr_zeros = np.zeros(X_umap.shape[1], dtype=np.float32)
-        if len(npz_files) == 1:
-            putils.plot_pca_projection_single(X_umap, evr_zeros, window_meta, plot_path)
-            putils.plot_pca_projection_single_3d(X_umap, evr_zeros, window_meta,
-                                                  output_root / "umap_plot_3d.png")
-        else:
-            putils.plot_pca_projection(X_umap, evr_zeros, window_meta, plot_path)
-            putils.plot_pca_projection_3d(X_umap, evr_zeros, window_meta,
-                                           output_root / "umap_plot_3d.png")
+        putils.plot_pca_projection(X_umap, evr_zeros, window_meta, plot_path)
+        putils.plot_pca_projection_3d(X_umap, evr_zeros, window_meta,
+                                      output_root / "umap_plot_3d.png")
         print(f"Saved to {plot_path}")
 
 

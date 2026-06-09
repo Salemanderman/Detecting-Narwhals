@@ -291,7 +291,7 @@ def ask_action(args) -> tuple[str, str | None]:
 
     print(f"\nWhat next?  ({args.algorithm.upper()}  {label}={current})")
     print(f"  [r] re-cluster  [t] tighter ({label}={t})  [l] looser ({label}={l})  [c] custom {label}")
-    print(f"  [f] final (ensemble)  [s] save + exit  [q] quit")
+    print(f"  [s] save + exit  [q] quit")
     while True:
         raw = input("> ").strip().lower()
         if raw == 'r':
@@ -310,14 +310,12 @@ def ask_action(args) -> tuple[str, str | None]:
                 print("  must be an integer")
                 continue
             return 'recluster', _ask_strategy(args.algorithm)
-        elif raw == 'f':
-            return 'final', None
         elif raw == 's':
             return 'save', None
         elif raw == 'q':
             return 'quit', None
         else:
-            print("  use r/t/l/c/f/s/q")
+            print("  use r/t/l/c/s/q")
 
 
 def _run(cmd: list[str]) -> bool:
@@ -384,29 +382,6 @@ def run_cluster_step(pca_root: Path, cluster_out: Path,
     return _run(cmd)
 
 
-def run_ensemble(pca_root: Path, ensemble_out: Path, args) -> bool:
-    cmd = [
-        sys.executable, str(ROOT / 'clustering' / 'ensemble_cluster.py'),
-        '--pca-root',         str(pca_root),
-        '--output-root',      str(ensemble_out),
-        '--npz-root',         str(args.npz_root),
-        '--mel-start',        str(args.mel_start),
-        '--n-runs',           '100',
-        '--k-min',            '2',
-        '--k-max',            '15',
-        '--min-cluster-size', str(args.min_cluster_size),
-        '--base-algorithm',   args.ensemble_base_algorithm,
-    ]
-    if args.mel_end:
-        cmd += ['--mel-end', str(args.mel_end)]
-    if args.min_samples:
-        cmd += ['--min-samples', str(args.min_samples)]
-    if args.ensemble_base_algorithm == 'dpmm':
-        cmd += ['--dpmm-max-components', str(args.dpmm_max_components),
-                '--dpmm-concentration',  str(args.dpmm_concentration)]
-    return _run(cmd)
-
-
 
 def main():
     ap = argparse.ArgumentParser(
@@ -440,7 +415,7 @@ def main():
     ap.add_argument('--n-neighbors',  type=int,   default=15)
     ap.add_argument('--min-dist',     type=float, default=0.1)
     ap.add_argument('--feature-mode', default='mfcc',
-                    choices=['mean_std', 'acoustic', 'extended_acoustic', 'mfcc', 'passthrough'],
+                    choices=['mean_std', 'mfcc'],
                     help="Feature mode for UMAP embedding (default: mfcc)")
     # Clustering algorithm (overridden by --strategy if given)
     ap.add_argument('--algorithm', default='dpmm',
@@ -460,10 +435,6 @@ def main():
                     help="DPMM upper bound on components (default: 20)")
     ap.add_argument('--dpmm-concentration',  type=float, default=0.01,
                     help="DPMM concentration α — lower = fewer clusters (default: 0.01)")
-    # Ensemble final pass
-    ap.add_argument('--ensemble-base-algorithm', default='kmeans',
-                    choices=['kmeans', 'dpmm'],
-                    help="Base algorithm for final ensemble clustering (default: kmeans)")
     args = ap.parse_args()
 
     if args.strategy:
@@ -545,27 +516,17 @@ def main():
             sys.exit(0)
 
         reduction_dir = pass_dir / args.reduction
-        is_final      = action == 'final'
         print(f"\nRe-embedding {len(filtered_df)} windows ({args.reduction}, {args.pca_method})...")
-        if not run_reduction(filtered_csv, reduction_dir, args, plot=is_final):
+        if not run_reduction(filtered_csv, reduction_dir, args, plot=False):
             print(f"[error] {args.reduction.upper()} step failed")
             sys.exit(1)
 
-        if is_final:
-            ensemble_dir = pass_dir / 'ensemble'
-            print(f"\nRunning final ensemble clustering...")
-            if not run_ensemble(reduction_dir, ensemble_dir, args):
-                print("[error] Ensemble clustering failed")
-                sys.exit(1)
-            print(f"Final clustering → {ensemble_dir}")
-            current_clusters_dir = ensemble_dir
-        else:
-            cluster_dir = pass_dir / 'clusters'
-            print(f"\nClustering ({args.algorithm}, mcs={args.min_cluster_size})...")
-            if not run_cluster_step(reduction_dir, cluster_dir, args.min_cluster_size, args):
-                print("[error] Clustering step failed")
-                sys.exit(1)
-            current_clusters_dir = cluster_dir
+        cluster_dir = pass_dir / 'clusters'
+        print(f"\nClustering ({args.algorithm}, mcs={args.min_cluster_size})...")
+        if not run_cluster_step(reduction_dir, cluster_dir, args.min_cluster_size, args):
+            print("[error] Clustering step failed")
+            sys.exit(1)
+        current_clusters_dir = cluster_dir
 
         pass_n += 1
 
