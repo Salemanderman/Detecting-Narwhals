@@ -24,8 +24,6 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "clustering"))
 
 LABEL_MAP = {
     'k': 'keep',

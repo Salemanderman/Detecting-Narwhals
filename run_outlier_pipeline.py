@@ -189,11 +189,10 @@ def main():
         sys.executable, "analysis/finding_outliers.py",
         "--pca-root", str(pca_root),
         "--npz-root", str(npz_root),
-        "--plots-root", str(outliers_root),
+        "--output-root", str(outliers_root),
         "--window-secs", str(args.window_secs),
         "--distance-metric", args.distance_metric,
         "--threshold-percentile", str(args.threshold_percentile),
-        "--save-csv",
     ]
     if args.mel_start is not None:
         cmd.extend(["--mel-start", str(args.mel_start)])
@@ -202,8 +201,8 @@ def main():
     if not args.no_audio_clips:
         cmd.extend(["--audio-root", str(audio_root)])
     cmd.extend(["--audio-crop-start-secs", str(args.audio_crop_start_secs)])
-    if args.no_plot:
-        cmd.append("--no-plot")
+    if not args.no_plot:
+        cmd.append("--plot")
 
 
     print(f"\n\n\n\n{'='*60}")

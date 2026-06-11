@@ -4,7 +4,6 @@ No algorithm logic here — import from clustering_core instead.
 """
 
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from pathlib import Path

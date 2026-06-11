@@ -4,24 +4,27 @@ Finding Outliers in PCA Plot
 This script loads the PCA results and identifies outliers based on distance
 from the center of the PCA space.
 
+The outlier table (outliers.csv) and report are saved by default. Use --plot to
+also save spectrogram/PCA plots, and --no-csv to skip the CSV.
+
 Use for example:
     python analysis/finding_outliers.py \
         --pca-root subsetWithValidatedCalls/pca_output \
         --npz-root subsetWithValidatedCalls/npzFiles \
         --distance-metric mahalanobis \
-        --threshold-std 3 \
-        --plots-root analysis/outlier_plots \
-        --save-csv \
+        --threshold-percentile 95 \
+        --output-root analysis/outlier_plots \
         --mel-start 9 \
         --mel-end 61
 
-Or with euclidean distance and saving results:
+Or with euclidean distance and plots enabled:
     python analysis/finding_outliers.py \
         --pca-root subsetWithValidatedCalls/pca_output \
         --npz-root subsetWithValidatedCalls/npzFiles \
         --distance-metric euclidean \
-        --threshold-std 2.5 \
-        --save-csv \
+        --threshold-percentile 97 \
+        --output-root analysis/outlier_plots \
+        --plot \
         --mel-start 9 \
         --mel-end 61
 """
@@ -261,22 +264,22 @@ def main():
                     help="First mel bin to include in spectrogram plots (default: 11).")
     ap.add_argument("--mel-end", type=int, default=None,
                     help="Last mel bin (exclusive) to include in spectrogram plots (default: all).")
-    ap.add_argument("--save-csv", action="store_true",
-                    help="Save outlier table to CSV file.")
-    ap.add_argument("--plots-root", type=str, required=True,
-                    help="Directory to save plots. If not provided, plots will be shown instead of saved")
+    ap.add_argument("--output-root", type=str, required=True,
+                    help="Directory to save outputs (outliers.csv, report, and any plots/clips).")
+    ap.add_argument("--no-csv", action="store_true",
+                    help="Skip writing the outlier table and report CSV (saved by default).")
     ap.add_argument("--audio-root", type=str, default=None,
                     help="Directory containing raw .wav files. If provided, audio clips will be saved for each outlier.")
-    ap.add_argument("--no-plot", action="store_true",
-                    help="Skip all plotting.")
+    ap.add_argument("--plot", action="store_true",
+                    help="Save spectrogram and PCA plots (off by default).")
     ap.add_argument("--audio-crop-start-secs", type=int, default=5, dest="audio_crop_start_secs",
                     help="Seconds cut from the start of each recording during extraction (default: 5).")
     args = ap.parse_args()
 
     pca_output_root = Path(args.pca_root)
     npz_root = Path(args.npz_root)
-    plot_output_root = Path(args.plots_root)
-    plot_output_root.mkdir(parents=True, exist_ok=True)
+    output_root = Path(args.output_root)
+    output_root.mkdir(parents=True, exist_ok=True)
 
     print(f"PCA output: {pca_output_root}")
     print(f"Spectrogram root: {npz_root}")
@@ -333,14 +336,14 @@ def main():
         # Group outliers by source file
         outliers_by_file = outlier_df.groupby("File").size().sort_values(ascending=False)
 
-    # Save CSV if requested
-    if args.save_csv and not outlier_df.empty:
-        csv_path = plot_output_root / "outliers.csv"
+    # Save CSV by default (unless --no-csv)
+    if not args.no_csv and not outlier_df.empty:
+        csv_path = output_root / "outliers.csv"
         outlier_df.to_csv(csv_path, index=False)
         print(f"\nSaved outlier table to: {csv_path}")
 
         # Write summary report to text file
-        report_path = plot_output_root / "outliers_report.txt"
+        report_path = output_root / "outliers_report.txt"
         with open(report_path, "w") as f:
             f.write("OUTLIER DETECTION REPORT\n\n\n")
             f.write(f"Distance metric: {args.distance_metric}\n")
@@ -357,20 +360,20 @@ def main():
             f.write(outlier_df.to_string() + "\n")
         print(f"Saved report to: {report_path}")
 
-    # Plotting
-    if not args.no_plot:
+    # Plotting (off by default, enabled with --plot)
+    if args.plot:
         # Settings for window extraction
         spec_cfg = configs.get_specgram_config()
         secs_per_frame = spec_cfg["hop_length"] / spec_cfg["sample_rate"]
         window_frames = max(1, round(args.window_secs / secs_per_frame))
 
-        pca_plot_path = plot_output_root / "outliers_pca_plot.png"
+        pca_plot_path = output_root / "outliers_pca_plot.png"
         plot_pca_with_outliers(X_pca, evr, mean_pca, outlier_mask, save_path=pca_plot_path)
 
         if outlier_df.empty:
             print("\nNo outliers found, skipping spectrogram plotting.")
         else:
-            outliers_root = plot_output_root / "outliers"
+            outliers_root = output_root / "outliers"
             outliers_root.mkdir(parents=True, exist_ok=True)
 
             # Group outliers by source file and save one grid plot per file
@@ -399,7 +402,7 @@ def main():
     # Save audio clips if audio_root is provided
     if args.audio_root and not outlier_df.empty:
         audio_root = Path(args.audio_root)
-        outliers_root = plot_output_root / "outliers"
+        outliers_root = output_root / "outliers"
         outliers_root.mkdir(parents=True, exist_ok=True)
 
         # Group outliers by source file

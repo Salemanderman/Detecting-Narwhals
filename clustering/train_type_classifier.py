@@ -6,15 +6,9 @@ files, trains a RandomForestClassifier with balanced class weights, and saves
 the model + metadata with joblib.
 
 Usage:
-    python analysis/train_type_classifier.py \
+    python clustering/train_type_classifier.py \
         --npz-root output/mixedDataset/melBins/towsey/npz \
-        --output-path evaluation/type_classifier.joblib
-
-    # Multiple NPZ roots when annotations span several datasets:
-    python analysis/train_type_classifier.py \
-        --npz-root output/mixedDataset/melBins/towsey/npz \
-                   output/GOODClusteringWithTowsey/subsetWithValidatedCalls/npz \
-        --output-path evaluation/type_classifier.joblib
+        --output-root evaluation/
 """
 
 import argparse
@@ -36,13 +30,9 @@ import utilities.feature_utils as futils
 from clustering_core import mfcc_features
 
 
-def build_npz_index(npz_roots: list[Path]) -> dict[str, Path]:
-    """Map filename → full path across all provided roots."""
-    index = {}
-    for root in npz_roots:
-        for p in root.glob("*.npz"):
-            index[p.name] = p
-    return index
+def build_npz_index(npz_root: Path) -> dict[str, Path]:
+    """Map filename → full path."""
+    return {p.name: p for p in npz_root.glob("*.npz")}
 
 
 def extract_features(annotations: pd.DataFrame, npz_index: dict,
@@ -74,10 +64,10 @@ def main():
     ap = argparse.ArgumentParser(description="Train a type classifier on annotated windows.")
     ap.add_argument("--annotations-csv", default=str(ROOT / "evaluation" / "type_annotations.csv"),
                     help="Type annotations CSV (default: evaluation/type_annotations.csv)")
-    ap.add_argument("--npz-root", nargs="+", required=True,
-                    help="One or more directories containing .npz spectrogram files")
-    ap.add_argument("--output-path", default=str(ROOT / "evaluation" / "type_classifier.joblib"),
-                    help="Where to save the trained model (default: evaluation/type_classifier.joblib)")
+    ap.add_argument("--npz-root", required=True,
+                    help="Directory containing .npz spectrogram files")
+    ap.add_argument("--output-root", default=str(ROOT / "evaluation"),
+                    help="Directory to save the trained model (default: evaluation/)")
     ap.add_argument("--mel-start", type=int, default=11)
     ap.add_argument("--mel-end",   type=int, default=128)
     ap.add_argument("--n-mfcc",    type=int, default=20)
@@ -112,8 +102,8 @@ def main():
             print(f"[error] No types left with >= {CV_FOLDS} examples. Label more clusters.")
             sys.exit(1)
 
-    npz_index = build_npz_index([Path(r) for r in args.npz_root])
-    print(f"\nIndexed {len(npz_index)} NPZ files across {len(args.npz_root)} root(s)")
+    npz_index = build_npz_index(Path(args.npz_root))
+    print(f"\nIndexed {len(npz_index)} NPZ files")
 
     print(f"\nExtracting MFCC features  (mel_start={args.mel_start}, mel_end={args.mel_end}, n_mfcc={args.n_mfcc})...")
     X, y = extract_features(annotations, npz_index, args.mel_start, args.mel_end, args.n_mfcc)
@@ -136,8 +126,9 @@ def main():
 
     clf.fit(X, y)
 
-    output_path = Path(args.output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_root = Path(args.output_root)
+    output_root.mkdir(parents=True, exist_ok=True)
+    output_path = output_root / "type_classifier.joblib"
     payload = {
         "model":      clf,
         "classes":    list(clf.classes_),
