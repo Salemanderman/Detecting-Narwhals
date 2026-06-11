@@ -98,55 +98,6 @@ def plot_silhouette(X_norm, labels, k, save_path):
     print(f"[plot] {save_path}")
 
 
-
-def plot_recorder_distribution(df, k, save_path):
-    df = df.copy()
-    df["recorder"] = df["File"].apply(lambda f: Path(f).stem.split(".")[0])
-    recorders = sorted(df["recorder"].unique())
-    clusters  = sorted(df["cluster"].unique())
-    xlabels   = ["Noise" if c == -1 else f"C{c}" for c in clusters]
-    totals    = {c: len(df[df["cluster"] == c]) for c in clusters}
-    fracs     = {r: [df[(df["cluster"] == c) & (df["recorder"] == r)].shape[0] / max(totals[c], 1)
-                     for c in clusters]
-                 for r in recorders}
-
-    fig, ax = plt.subplots(figsize=(max(5, len(clusters) * 1.2), 4))
-    bottom  = [0.0] * len(clusters)
-    colours = plt.cm.tab10.colors
-    for i, r in enumerate(recorders):
-        ax.bar(xlabels, fracs[r], bottom=bottom, label=r, color=colours[i % len(colours)])
-        bottom = [b + f for b, f in zip(bottom, fracs[r])]
-    ax.axhline(0.5, color="black", linewidth=0.7, linestyle="--", alpha=0.4)
-    ax.set_ylabel("Fraction of windows", fontsize=12)
-    ax.set_xlabel("Cluster", fontsize=12)
-    ax.set_ylim(0, 1)
-    ax.set_title("Recorder distribution per cluster", fontsize=13, fontweight="bold")
-    ax.legend(title="Recorder")
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"[plot] {save_path}")
-
-
-def plot_validation_recall(val_df, k, tolerance, save_path):
-    colours = _cluster_colours(k)
-    fig, ax = plt.subplots(figsize=(max(6, len(val_df) * 1.2), 4))
-    for _, row in val_df.iterrows():
-        j   = int(row["cluster"])
-        col = "lightgrey" if j == -1 else colours[j]
-        ax.bar(f"C{j}" if j >= 0 else "Noise", row["recall"], color=col, edgecolor="white")
-    ax.set_xlabel("Cluster", fontsize=12)
-    ax.set_ylabel("Recall", fontsize=12)
-    ax.set_ylim(0, 1.05)
-    ax.set_title(f"Narwhal call recall per cluster  (tolerance={tolerance}s)",
-                 fontsize=12, fontweight="bold")
-    ax.grid(True, axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"[plot] {save_path}")
-
-
 def plot_elbow(X_norm, max_k, seed, n_init, save_path):
     ks                   = list(range(2, max_k + 1))
     inertias, sil_scores = [], []
@@ -174,7 +125,6 @@ def plot_elbow(X_norm, max_k, seed, n_init, save_path):
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"[plot] {save_path}")
-
 
 
 def save_cluster_grid(cluster_df, cluster_id, npz_root, window_frames, spec_cfg,

@@ -26,7 +26,6 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
-from sklearn.preprocessing import LabelEncoder
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -94,17 +93,24 @@ def main():
     print(f"Loaded {len(annotations)} annotations from {ann_path}")
     print(f"  Type counts:\n{annotations['type'].value_counts().to_string()}")
 
-    # Drop unknowns and types with < 5 examples
-    counts = annotations["type"].value_counts()
-    rare   = counts[counts < 5].index.tolist()
-    if rare:
-        print(f"  [warn] Dropping rare types (< 5 examples): {rare}")
-        annotations = annotations[~annotations["type"].isin(rare)]
     annotations = annotations[annotations["type"] != "unknown"]
-
-    if len(annotations) < 10:
-        print("[error] Not enough labelled windows to train. Label more clusters first.")
+    if len(annotations) == 0:
+        print("[error] No labelled annotations found or all are unknown.")
         sys.exit(1)
+
+    # Drop types with fewer than CV_FOLDS examples. Stratified k-fold CV (below)
+    # requires every class to have at least one example in each of the k folds,
+    # so a class with < k examples — and especially a singleton — makes
+    # cross_val_score fail. Free-text labels make stray rare types easy to create.
+    CV_FOLDS = 5
+    counts = annotations["type"].value_counts()
+    rare   = counts[counts < CV_FOLDS].index.tolist()
+    if rare:
+        print(f"  [warn] Dropping rare types (< {CV_FOLDS} examples): {rare}")
+        annotations = annotations[~annotations["type"].isin(rare)]
+        if len(annotations) == 0:
+            print(f"[error] No types left with >= {CV_FOLDS} examples. Label more clusters.")
+            sys.exit(1)
 
     npz_index = build_npz_index([Path(r) for r in args.npz_root])
     print(f"\nIndexed {len(npz_index)} NPZ files across {len(args.npz_root)} root(s)")
@@ -120,9 +126,11 @@ def main():
         n_jobs=-1,
     )
 
-    print(f"\nCross-validation (5-fold)...")
+    print(f"\nCross-validation ({CV_FOLDS}-fold)...")
+    # Secondary guard: feature extraction may skip rows (missing/short files), so a
+    # class can shrink below CV_FOLDS even after the rare-type filter above.
     min_class_count = int(np.unique(y, return_counts=True)[1].min())
-    cv = min(5, min_class_count)
+    cv = min(CV_FOLDS, min_class_count)
     scores = cross_val_score(clf, X, y, cv=cv, scoring="balanced_accuracy")
     print(f"  Balanced accuracy: {scores.mean():.3f} ± {scores.std():.3f}")
 
@@ -142,7 +150,6 @@ def main():
     joblib.dump(payload, output_path)
     print(f"\nModel saved → {output_path}")
     print(f"  Classes: {list(clf.classes_)}")
-    print(f"  Feature importances (top 5): {np.argsort(clf.feature_importances_)[::-1][:5].tolist()}")
 
 
 if __name__ == "__main__":

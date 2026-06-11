@@ -43,18 +43,6 @@ STRATEGIES = {
               desc='PCA  + MFCC + KMeans'),
 }
 
-# Recognised type keywords — typing any of these assigns the type and also determines
-# whether the cluster is kept or removed.
-# Extend freely; keys are what the user types, values are the canonical stored names.
-TYPE_MAP = {
-    'clicks':  'clicks',
-    'tonal':   'tonal',
-    'noise':   'noise',
-    'ice':     'ice-noise',
-}
-# These types are tagged in the annotations CSV but removed from the iterative pipeline.
-REMOVE_TYPES = {'noise', 'ice'}
-
 
 def open_image(path: Path):
     print(f"  [image: {path}]")
@@ -93,7 +81,6 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
                 session_labels: set) -> tuple[dict, dict]:
     cluster_ids = sorted(df['cluster'].unique())
     n_total     = len(df)
-    type_keys   = ' / '.join(TYPE_MAP.keys())
     custom_keys = ' / '.join(sorted(session_labels)) if session_labels else ''
 
     print(f"\nPass {pass_n}  —  {len(cluster_ids)} clusters  {n_total} windows")
@@ -102,10 +89,9 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
         name = "Noise" if c == -1 else f"Cluster {c}"
         print(f"  {name}: {n} windows")
 
-    label_hint = type_keys
+    print(f"\nLabels: [k]eep  [r]emove  or type a name then choose keep/remove")
     if custom_keys:
-        label_hint += f"  |  custom: {custom_keys}"
-    print(f"\nLabels: [k]eep  [r]emove  or type name ({label_hint}) then choose keep/remove")
+        print(f"  Labels used so far: {custom_keys}")
     print("Nav:    Enter=advance (keep)  b=back  d=done (keep rest)  <number>=jump  n/p=page  ?=help\n")
 
     labels: dict[int, str] = {}
@@ -156,8 +142,7 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
 
             elif raw == '?':
                 print("  k=keep  r=remove  Enter=confirm/advance (default: keep)")
-                print(f"  type name ({type_keys}) = label cluster, then prompted for keep/remove")
-                print("  any other text = custom label (remembered for this session)")
+                print("  any other text = label cluster, then prompted for keep/remove")
                 print("  b=back  d=done (keep rest)  n/p=page  <number>=jump")
 
             elif raw == 'b':
@@ -178,20 +163,6 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
             elif raw in LABEL_MAP:
                 labels[c] = LABEL_MAP[raw]
                 print(f"  {LABEL_MAP[raw]}")
-                idx += 1
-                break
-
-            elif raw in TYPE_MAP:
-                types[c] = TYPE_MAP[raw]
-                default   = 'remove' if raw in REMOVE_TYPES else 'keep'
-                kr = input(f"  labelled [{TYPE_MAP[raw]}] — keep or remove? ([{default[0]}]/{'r' if default == 'keep' else 'k'}): ").strip().lower()
-                if kr == 'k':
-                    labels[c] = 'keep'
-                elif kr == 'r':
-                    labels[c] = 'remove'
-                else:
-                    labels[c] = default
-                print(f"  {labels[c]}  [{TYPE_MAP[raw]}]")
                 idx += 1
                 break
 
@@ -372,8 +343,6 @@ def run_cluster_step(pca_root: Path, cluster_out: Path,
     ]
     if args.mel_end:
         cmd += ['--mel-end', str(args.mel_end)]
-    if args.algorithm == 'hdbscan' and args.min_samples:
-        cmd += ['--min-samples', str(args.min_samples)]
     if args.algorithm == 'dpmm':
         cmd += ['--dpmm-max-components', str(args.dpmm_max_components),
                 '--dpmm-concentration',  str(args.dpmm_concentration)]
@@ -429,7 +398,6 @@ def main():
                     help="CSV for accumulated type labels (default: <output-root>/type_annotations.csv)")
     # HDBSCAN params
     ap.add_argument('--min-cluster-size', type=int, default=8)
-    ap.add_argument('--min-samples',      type=int, default=None)
     # DPMM params
     ap.add_argument('--dpmm-max-components', type=int,   default=20,
                     help="DPMM upper bound on components (default: 20)")
