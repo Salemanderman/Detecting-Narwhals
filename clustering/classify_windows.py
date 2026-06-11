@@ -5,10 +5,10 @@ Adds predicted_type and type_confidence columns, prints a per-cluster summary
 flagging uncertain or mixed-prediction clusters, and saves an annotated CSV.
 
 Usage:
-    python analysis/classify_windows.py \
-        --clusters-csv output/mixedDataset/melBins/towsey/iterative_mfcc/pass_5/clusters/clusters.csv \
-        --npz-root     output/mixedDataset/melBins/towsey/npz \
-        --output-csv   output/mixedDataset/melBins/towsey/iterative_mfcc/pass_5/clusters/clusters_classified.csv
+    python clustering/classify_windows.py \
+        --windows-csv output/mixedDataset/melBins/towsey/iterative_mfcc/pass_5/clusters/clusters.csv \
+        --npz-root    output/mixedDataset/melBins/towsey/npz \
+        --output-root output/mixedDataset/melBins/towsey/iterative_mfcc/pass_5/clusters
 """
 
 import argparse
@@ -16,7 +16,6 @@ import sys
 from pathlib import Path
 
 import joblib
-import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -118,14 +117,14 @@ def cluster_summary(df: pd.DataFrame, confidence_threshold: float):
 
 def main():
     ap = argparse.ArgumentParser(description="Classify windows by acoustic type using a trained model.")
-    ap.add_argument("--clusters-csv",  required=True,
-                    help="clusters.csv (or any CSV with File + Start Time (s) columns)")
+    ap.add_argument("--windows-csv",   required=True,
+                    help="CSV with File + Start Time (s) columns (e.g. clusters.csv)")
     ap.add_argument("--npz-root",      required=True,
                     help="Directory containing .npz spectrogram files")
     ap.add_argument("--model-path",    default=str(ROOT / "evaluation" / "type_classifier.joblib"),
                     help="Trained model from train_type_classifier.py (default: evaluation/type_classifier.joblib)")
-    ap.add_argument("--output-csv",    default=None,
-                    help="Where to save the annotated CSV (default: <clusters_csv_stem>_classified.csv)")
+    ap.add_argument("--output-root",   default=None,
+                    help="Directory to save the annotated CSV (default: alongside the input CSV)")
     ap.add_argument("--confidence-threshold", type=float, default=0.6,
                     help="Below this confidence, a window is flagged as uncertain (default: 0.6)")
     args = ap.parse_args()
@@ -133,7 +132,7 @@ def main():
     model_path = Path(args.model_path)
     if not model_path.exists():
         print(f"[error] Model not found: {model_path}")
-        print("  Run analysis/train_type_classifier.py first.")
+        print("  Run clustering/train_type_classifier.py first.")
         sys.exit(1)
 
     payload = joblib.load(model_path)
@@ -141,9 +140,9 @@ def main():
     print(f"  Classes: {payload['classes']}  |  trained on {payload['n_train']} windows")
     print(f"  Features: mel_start={payload['mel_start']}  mel_end={payload['mel_end']}  n_mfcc={payload['n_mfcc']}")
 
-    clusters_csv = Path(args.clusters_csv)
-    df = pd.read_csv(clusters_csv)
-    print(f"\nLoaded {len(df)} windows from {clusters_csv}")
+    windows_csv = Path(args.windows_csv)
+    df = pd.read_csv(windows_csv)
+    print(f"\nLoaded {len(df)} windows from {windows_csv}")
 
     npz_index = build_npz_index(Path(args.npz_root))
     print(f"Indexed {len(npz_index)} NPZ files")
@@ -153,10 +152,11 @@ def main():
 
     cluster_summary(df_out, args.confidence_threshold)
 
-    output_csv = Path(args.output_csv) if args.output_csv else \
-        clusters_csv.parent / (clusters_csv.stem + "_classified.csv")
-    df_out.to_csv(output_csv, index=False)
-    print(f"\nSaved → {output_csv}")
+    output_root = Path(args.output_root) if args.output_root else windows_csv.parent
+    output_root.mkdir(parents=True, exist_ok=True)
+    output_path = output_root / (windows_csv.stem + "_classified.csv")
+    df_out.to_csv(output_path, index=False)
+    print(f"\nSaved → {output_path}")
 
 
 if __name__ == "__main__":

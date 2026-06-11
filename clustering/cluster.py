@@ -38,10 +38,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(CLUSTER_DIR))
 
 import utilities.configs as configs
-from clustering_core  import (NEEDS_K, run_clustering, compute_metrics, compute_validation_recall)
-from clustering_plots import (plot_clusters, plot_cluster_sizes, plot_silhouette,
-                               plot_recorder_distribution,
-                               plot_validation_recall, save_cluster_grid)
+from clustering_core  import (run_clustering, compute_validation_recall)
+from clustering_plots import (plot_clusters, plot_cluster_sizes, save_cluster_grid)
 
 
 def main():
@@ -59,11 +57,8 @@ def main():
     ap.add_argument("--algorithm",   default="kmeans",
                     choices=["kmeans", "hdbscan", "dpmm"])
     ap.add_argument("--n-clusters",  type=int, default=5)
-    ap.add_argument("--cluster-dims", type=int, default=20,
-                    help="PCA dimensions to use for clustering (default: 20)")
     ap.add_argument("--seed",         type=int, default=42)
     ap.add_argument("--min-cluster-size",    type=int,   default=10)
-    ap.add_argument("--min-samples",         type=int,   default=None)
     ap.add_argument("--dpmm-max-components", type=int,   default=20,
                     help="DPMM upper bound on clusters (default: 20, unused ones shrink to 0)")
     ap.add_argument("--dpmm-concentration",  type=float, default=0.01,
@@ -137,13 +132,12 @@ def main():
     out_csv = "clusters.csv"
 
     n = len(df)
-    if args.algorithm in NEEDS_K and n < args.n_clusters:
+    if args.algorithm == "kmeans" and n < args.n_clusters:
         raise ValueError(f"Fewer windows ({n}) than clusters ({args.n_clusters}).")
 
     # ── Build feature matrix ─────────────────────────────────────────────────
-    dims         = min(args.cluster_dims, X_pca.shape[1])
-    X_feat       = X_pca[indices, :dims].astype(np.float32)
-    feature_desc = f"pca({dims})"
+    X_feat       = X_pca[indices].astype(np.float32)
+    feature_desc = f"pca({X_pca.shape[1]})"
 
     X_norm = StandardScaler().fit_transform(X_feat)
     progress.update(1)
@@ -161,13 +155,6 @@ def main():
     if n_noise:
         print(f"  Noise:     {n_noise:5d} windows  ({100*n_noise/n:.1f}%)")
 
-    # ── Metrics ──────────────────────────────────────────────────────────────
-    metrics = compute_metrics(X_norm, labels, args.algorithm)
-    print(f"\nClustering metrics:")
-    print(f"  Silhouette:        {metrics['silhouette']:.4f}  (higher = better)")
-    print(f"  Davies-Bouldin:    {metrics['davies_bouldin']:.4f}  (lower = better)")
-    print(f"  Calinski-Harabasz: {metrics['calinski_harabasz']:.1f}  (higher = better)")
-
     # ── Save CSVs ────────────────────────────────────────────────────────────
     df["cluster"] = labels
     df.to_csv(output_root / out_csv, index=False)
@@ -175,20 +162,14 @@ def main():
 
     summary = df.groupby("cluster").agg(count=("cluster", "count")).reset_index()
     summary.to_csv(output_root / "cluster_summary.csv", index=False)
-    pd.DataFrame([metrics]).to_csv(output_root / "metrics.csv", index=False)
     print(f"\n{summary.to_string(index=False)}")
     progress.update(1)
 
     # ── Plots ────────────────────────────────────────────────────────────────
     if not args.no_plot:
-        labeled = labels != -1
         plot_clusters(X_pca[indices, :2], labels, k, args.algorithm,
                       output_root / "cluster_scatter.png", n_total=n)
         plot_cluster_sizes(labels, k, output_root / "cluster_sizes.png")
-        if not args.outliers_csv:
-            plot_recorder_distribution(df, k, output_root / "recorder_distribution.png")
-        if labeled.sum() > k > 1:
-            plot_silhouette(X_norm, labels, k, output_root / "silhouette.png")
 
     # ── Validation recall ────────────────────────────────────────────────────
     if args.validation_csv:
@@ -200,9 +181,6 @@ def main():
             val_df = compute_validation_recall(df, val_path, args.tolerance)
             val_df.to_csv(output_root / "validation_recall.csv", index=False)
             print(val_df.to_string(index=False))
-            if not args.no_plot:
-                plot_validation_recall(val_df, k, args.tolerance,
-                                       output_root / "validation_recall.png")
 
     # ── Spectrogram grids ────────────────────────────────────────────────────
     if not args.no_plot and args.npz_root:

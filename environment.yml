@@ -18,4 +18,7 @@ dependencies:
   - numpy>=1.24
   - scikit-learn
   - tqdm
+  - pip
+  - pip:
+    - umap-learn
   # remove sox on Windows unless you specifically need CLI sox

@@ -9,7 +9,7 @@ Windows are sorted highest-confidence first within each type, so the most certai
 predictions appear on the first page.
 
 Usage:
-    python analysis/plot_classified_grids.py \
+    python clustering/plot_classified_grids.py \
         --classified-csv output/mixedDataset/melBins/towsey/clusters_dpmm_init/clusters_classified.csv \
         --npz-root        output/mixedDataset/melBins/towsey/npz \
         --output-root     output/mixedDataset/melBins/towsey/classified_grids
@@ -26,7 +26,6 @@ from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "clustering"))
 
 import utilities.configs as configs
 import utilities.feature_utils as futils

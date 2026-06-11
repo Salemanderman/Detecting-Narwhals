@@ -24,8 +24,6 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "clustering"))
 
 LABEL_MAP = {
     'k': 'keep',
@@ -42,18 +40,6 @@ STRATEGIES = {
     'k': dict(reduction='pca',   feature_mode='mfcc', pca_method='mfcc', algorithm='kmeans',
               desc='PCA  + MFCC + KMeans'),
 }
-
-# Recognised type keywords — typing any of these assigns the type and also determines
-# whether the cluster is kept or removed.
-# Extend freely; keys are what the user types, values are the canonical stored names.
-TYPE_MAP = {
-    'clicks':  'clicks',
-    'tonal':   'tonal',
-    'noise':   'noise',
-    'ice':     'ice-noise',
-}
-# These types are tagged in the annotations CSV but removed from the iterative pipeline.
-REMOVE_TYPES = {'noise', 'ice'}
 
 
 def open_image(path: Path):
@@ -93,7 +79,6 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
                 session_labels: set) -> tuple[dict, dict]:
     cluster_ids = sorted(df['cluster'].unique())
     n_total     = len(df)
-    type_keys   = ' / '.join(TYPE_MAP.keys())
     custom_keys = ' / '.join(sorted(session_labels)) if session_labels else ''
 
     print(f"\nPass {pass_n}  —  {len(cluster_ids)} clusters  {n_total} windows")
@@ -102,10 +87,9 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
         name = "Noise" if c == -1 else f"Cluster {c}"
         print(f"  {name}: {n} windows")
 
-    label_hint = type_keys
+    print(f"\nLabels: [k]eep  [r]emove  or type a name then choose keep/remove")
     if custom_keys:
-        label_hint += f"  |  custom: {custom_keys}"
-    print(f"\nLabels: [k]eep  [r]emove  or type name ({label_hint}) then choose keep/remove")
+        print(f"  Labels used so far: {custom_keys}")
     print("Nav:    Enter=advance (keep)  b=back  d=done (keep rest)  <number>=jump  n/p=page  ?=help\n")
 
     labels: dict[int, str] = {}
@@ -156,8 +140,7 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
 
             elif raw == '?':
                 print("  k=keep  r=remove  Enter=confirm/advance (default: keep)")
-                print(f"  type name ({type_keys}) = label cluster, then prompted for keep/remove")
-                print("  any other text = custom label (remembered for this session)")
+                print("  any other text = label cluster, then prompted for keep/remove")
                 print("  b=back  d=done (keep rest)  n/p=page  <number>=jump")
 
             elif raw == 'b':
@@ -178,20 +161,6 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
             elif raw in LABEL_MAP:
                 labels[c] = LABEL_MAP[raw]
                 print(f"  {LABEL_MAP[raw]}")
-                idx += 1
-                break
-
-            elif raw in TYPE_MAP:
-                types[c] = TYPE_MAP[raw]
-                default   = 'remove' if raw in REMOVE_TYPES else 'keep'
-                kr = input(f"  labelled [{TYPE_MAP[raw]}] — keep or remove? ([{default[0]}]/{'r' if default == 'keep' else 'k'}): ").strip().lower()
-                if kr == 'k':
-                    labels[c] = 'keep'
-                elif kr == 'r':
-                    labels[c] = 'remove'
-                else:
-                    labels[c] = default
-                print(f"  {labels[c]}  [{TYPE_MAP[raw]}]")
                 idx += 1
                 break
 
@@ -291,7 +260,7 @@ def ask_action(args) -> tuple[str, str | None]:
 
     print(f"\nWhat next?  ({args.algorithm.upper()}  {label}={current})")
     print(f"  [r] re-cluster  [t] tighter ({label}={t})  [l] looser ({label}={l})  [c] custom {label}")
-    print(f"  [f] final (ensemble)  [s] save + exit  [q] quit")
+    print(f"  [s] save + exit  [q] quit")
     while True:
         raw = input("> ").strip().lower()
         if raw == 'r':
@@ -310,14 +279,12 @@ def ask_action(args) -> tuple[str, str | None]:
                 print("  must be an integer")
                 continue
             return 'recluster', _ask_strategy(args.algorithm)
-        elif raw == 'f':
-            return 'final', None
         elif raw == 's':
             return 'save', None
         elif raw == 'q':
             return 'quit', None
         else:
-            print("  use r/t/l/c/f/s/q")
+            print("  use r/t/l/c/s/q")
 
 
 def _run(cmd: list[str]) -> bool:
@@ -374,36 +341,11 @@ def run_cluster_step(pca_root: Path, cluster_out: Path,
     ]
     if args.mel_end:
         cmd += ['--mel-end', str(args.mel_end)]
-    if args.algorithm == 'hdbscan' and args.min_samples:
-        cmd += ['--min-samples', str(args.min_samples)]
     if args.algorithm == 'dpmm':
         cmd += ['--dpmm-max-components', str(args.dpmm_max_components),
                 '--dpmm-concentration',  str(args.dpmm_concentration)]
     if args.algorithm == 'kmeans':
         cmd += ['--n-clusters', str(args.n_clusters)]
-    return _run(cmd)
-
-
-def run_ensemble(pca_root: Path, ensemble_out: Path, args) -> bool:
-    cmd = [
-        sys.executable, str(ROOT / 'clustering' / 'ensemble_cluster.py'),
-        '--pca-root',         str(pca_root),
-        '--output-root',      str(ensemble_out),
-        '--npz-root',         str(args.npz_root),
-        '--mel-start',        str(args.mel_start),
-        '--n-runs',           '100',
-        '--k-min',            '2',
-        '--k-max',            '15',
-        '--min-cluster-size', str(args.min_cluster_size),
-        '--base-algorithm',   args.ensemble_base_algorithm,
-    ]
-    if args.mel_end:
-        cmd += ['--mel-end', str(args.mel_end)]
-    if args.min_samples:
-        cmd += ['--min-samples', str(args.min_samples)]
-    if args.ensemble_base_algorithm == 'dpmm':
-        cmd += ['--dpmm-max-components', str(args.dpmm_max_components),
-                '--dpmm-concentration',  str(args.dpmm_concentration)]
     return _run(cmd)
 
 
@@ -440,7 +382,7 @@ def main():
     ap.add_argument('--n-neighbors',  type=int,   default=15)
     ap.add_argument('--min-dist',     type=float, default=0.1)
     ap.add_argument('--feature-mode', default='mfcc',
-                    choices=['mean_std', 'acoustic', 'extended_acoustic', 'mfcc', 'passthrough'],
+                    choices=['mean_std', 'mfcc'],
                     help="Feature mode for UMAP embedding (default: mfcc)")
     # Clustering algorithm (overridden by --strategy if given)
     ap.add_argument('--algorithm', default='dpmm',
@@ -454,16 +396,11 @@ def main():
                     help="CSV for accumulated type labels (default: <output-root>/type_annotations.csv)")
     # HDBSCAN params
     ap.add_argument('--min-cluster-size', type=int, default=8)
-    ap.add_argument('--min-samples',      type=int, default=None)
     # DPMM params
     ap.add_argument('--dpmm-max-components', type=int,   default=20,
                     help="DPMM upper bound on components (default: 20)")
     ap.add_argument('--dpmm-concentration',  type=float, default=0.01,
                     help="DPMM concentration α — lower = fewer clusters (default: 0.01)")
-    # Ensemble final pass
-    ap.add_argument('--ensemble-base-algorithm', default='kmeans',
-                    choices=['kmeans', 'dpmm'],
-                    help="Base algorithm for final ensemble clustering (default: kmeans)")
     args = ap.parse_args()
 
     if args.strategy:
@@ -545,27 +482,17 @@ def main():
             sys.exit(0)
 
         reduction_dir = pass_dir / args.reduction
-        is_final      = action == 'final'
         print(f"\nRe-embedding {len(filtered_df)} windows ({args.reduction}, {args.pca_method})...")
-        if not run_reduction(filtered_csv, reduction_dir, args, plot=is_final):
+        if not run_reduction(filtered_csv, reduction_dir, args, plot=False):
             print(f"[error] {args.reduction.upper()} step failed")
             sys.exit(1)
 
-        if is_final:
-            ensemble_dir = pass_dir / 'ensemble'
-            print(f"\nRunning final ensemble clustering...")
-            if not run_ensemble(reduction_dir, ensemble_dir, args):
-                print("[error] Ensemble clustering failed")
-                sys.exit(1)
-            print(f"Final clustering → {ensemble_dir}")
-            current_clusters_dir = ensemble_dir
-        else:
-            cluster_dir = pass_dir / 'clusters'
-            print(f"\nClustering ({args.algorithm}, mcs={args.min_cluster_size})...")
-            if not run_cluster_step(reduction_dir, cluster_dir, args.min_cluster_size, args):
-                print("[error] Clustering step failed")
-                sys.exit(1)
-            current_clusters_dir = cluster_dir
+        cluster_dir = pass_dir / 'clusters'
+        print(f"\nClustering ({args.algorithm}, mcs={args.min_cluster_size})...")
+        if not run_cluster_step(reduction_dir, cluster_dir, args.min_cluster_size, args):
+            print("[error] Clustering step failed")
+            sys.exit(1)
+        current_clusters_dir = cluster_dir
 
         pass_n += 1
 

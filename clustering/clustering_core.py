@@ -8,9 +8,6 @@ import pandas as pd
 from scipy.fft import dct
 from sklearn.cluster import KMeans, HDBSCAN
 from sklearn.mixture import BayesianGaussianMixture
-from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
-
-NEEDS_K = {"kmeans"}
 
 
 
@@ -35,7 +32,7 @@ def run_clustering(X_norm: np.ndarray, args) -> np.ndarray:
                       random_state=args.seed).fit_predict(X_norm)
     elif algo == "hdbscan":
         return HDBSCAN(min_cluster_size=args.min_cluster_size,
-                       min_samples=args.min_samples or args.min_cluster_size).fit_predict(X_norm)
+                       min_samples=args.min_cluster_size).fit_predict(X_norm)
     elif algo == "dpmm":
         max_k       = getattr(args, "dpmm_max_components", 20)
         alpha       = getattr(args, "dpmm_concentration",  0.01)
@@ -49,20 +46,6 @@ def run_clustering(X_norm: np.ndarray, args) -> np.ndarray:
         ).fit_predict(X_norm)
     raise ValueError(f"Unknown algorithm: {algo}")
 
-
-def compute_metrics(X_norm: np.ndarray, labels: np.ndarray, algo: str) -> dict:
-    """Silhouette, Davies-Bouldin, and Calinski-Harabasz internal metrics."""
-    labeled    = labels != -1
-    n_clusters = int(labels[labeled].max()) + 1 if labeled.any() else 0
-    metrics    = {"algorithm": algo, "k": n_clusters,
-                  "n_noise": int((labels == -1).sum())}
-    if labeled.sum() > n_clusters > 1:
-        metrics["silhouette"]        = float(silhouette_score(X_norm[labeled], labels[labeled]))
-        metrics["davies_bouldin"]    = float(davies_bouldin_score(X_norm[labeled], labels[labeled]))
-        metrics["calinski_harabasz"] = float(calinski_harabasz_score(X_norm[labeled], labels[labeled]))
-    else:
-        metrics["silhouette"] = metrics["davies_bouldin"] = metrics["calinski_harabasz"] = float("nan")
-    return metrics
 
 
 def compute_validation_recall(df: pd.DataFrame, validation_csv, tolerance: float) -> pd.DataFrame:
