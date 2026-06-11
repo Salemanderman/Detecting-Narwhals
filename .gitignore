@@ -34,6 +34,7 @@
 
 !evaluation
 !evaluation/validatedChristerCalls.csv
+!evaluation/validatedCallsAfterFIrstPCA.csv
 !evaluation/compareChristerCalls.py
 !evaluation/type_annotations.csv
 !evaluation/type_classifier.joblib
@@ -44,12 +45,9 @@
 !clustering/clustering_plots.py
 !clustering/interactive_cluster_review.py
 !clustering/classify_windows.py
-!clustering/ensemble_cluster.py
 !clustering/plot_classified_grids.py
 !clustering/train_type_classifier.py
 
-!hyperparameter_tuning
-!hyperparameter_tuning/hyperparameter_tuning.py
 
 !plotsReport
 !plotsReport/towsey_walkthrough.ipynb
