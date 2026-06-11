@@ -30,7 +30,7 @@ LABEL_MAP = {
     'r': 'remove',
 }
 
-# Named clustering strategies — shown in the ask_action() sub-prompt.
+# Named clustering strategies, shown in the ask_action() sub-prompt.
 # Each entry sets the reduction method, feature mode, and clustering algorithm.
 STRATEGIES = {
     'h': dict(reduction='umap',  feature_mode='mfcc', pca_method='mfcc', algorithm='hdbscan',
@@ -45,7 +45,7 @@ STRATEGIES = {
 def open_image(path: Path):
     print(f"  [image: {path}]")
     if not path.exists():
-        print("  [image not found — continuing without preview]")
+        print("  [image not found, no preview]")
         return
     try:
         if sys.platform == 'darwin':
@@ -81,7 +81,7 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
     n_total     = len(df)
     custom_keys = ' / '.join(sorted(session_labels)) if session_labels else ''
 
-    print(f"\nPass {pass_n}  —  {len(cluster_ids)} clusters  {n_total} windows")
+    print(f"\nPass {pass_n}: {len(cluster_ids)} clusters  {n_total} windows")
     for c in cluster_ids:
         n    = len(df[df['cluster'] == c])
         name = "Noise" if c == -1 else f"Cluster {c}"
@@ -107,13 +107,13 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
         else:
             current = ""
         name = "Noise" if c == -1 else f"Cluster {c}"
-        print(f"[{pos}] {name} — {n} windows{current}")
+        print(f"[{pos}] {name}: {n} windows{current}")
         pages    = grid_paths(clusters_dir, c)
         page_idx = 0
         if pages:
             open_image(pages[0])
             if len(pages) > 1:
-                print(f"  Page 1/{len(pages)} — n=next page  p=prev page")
+                print(f"  Page 1/{len(pages)}: n=next page  p=prev page")
         else:
             print("  [no spectrogram grid found]")
 
@@ -176,7 +176,7 @@ def review_pass(df: pd.DataFrame, clusters_dir: Path, pass_n: int,
                 # treat as free-text label
                 types[c] = raw
                 session_labels.add(raw)
-                kr = input(f"  labelled [{raw}] — keep or remove? ([k]/r): ").strip().lower()
+                kr = input(f"  labelled [{raw}]: keep or remove? ([k]/r): ").strip().lower()
                 labels[c] = 'remove' if kr == 'r' else 'keep'
                 print(f"  {labels[c]}  [{raw}]")
                 idx += 1
@@ -202,7 +202,7 @@ def show_summary(labels: dict, types: dict, df: pd.DataFrame):
             for c in keep_ids
         )
         print(f"  keep:   {len(keep_ids)} cluster(s), {n_keep} windows  [{ids}]")
-    print(f"  → {n_keep}/{len(df)} windows pass to next pass")
+    print(f"  {n_keep}/{len(df)} windows pass to next pass")
 
 
 def save_type_annotations(df: pd.DataFrame, types: dict, csv_path: Path):
@@ -228,7 +228,7 @@ def save_type_annotations(df: pd.DataFrame, types: dict, csv_path: Path):
 
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     merged.to_csv(csv_path, index=False)
-    print(f"  [annotations saved → {csv_path}  ({len(new_rows)} new rows, {len(merged)} total)]")
+    print(f"  [annotations saved to {csv_path}  ({len(new_rows)} new rows, {len(merged)} total)]")
 
 
 def _ask_strategy(current_algorithm: str) -> str | None:
@@ -360,7 +360,7 @@ def main():
                     help="Spectrogram .npz directory (used for re-embedding and grids)")
     ap.add_argument('--output-root', required=True,
                     help="Where to write pass_1/, pass_2/, etc.")
-    # Named strategy — sets reduction + algorithm + feature mode together
+    # Named strategy: sets reduction, algorithm, and feature mode
     strat_help = '  '.join(f"{k}={v['desc']}" for k, v in STRATEGIES.items())
     ap.add_argument('--strategy', default=None, choices=list(STRATEGIES),
                     help=f"Starting clustering strategy (overrides --reduction/--algorithm/--pca-method/--feature-mode). "
@@ -400,7 +400,7 @@ def main():
     ap.add_argument('--dpmm-max-components', type=int,   default=20,
                     help="DPMM upper bound on components (default: 20)")
     ap.add_argument('--dpmm-concentration',  type=float, default=0.01,
-                    help="DPMM concentration α — lower = fewer clusters (default: 0.01)")
+                    help="DPMM concentration α (default: 0.01)")
     args = ap.parse_args()
 
     if args.strategy:
@@ -451,7 +451,7 @@ def main():
                 'labels': {str(k): v for k, v in labels.items()},
                 'types':  {str(k): v for k, v in types.items()},
             }, f, indent=2)
-        print(f"  [labels saved → {labels_file}]")
+        print(f"  [labels saved to {labels_file}]")
 
         # Save type annotations to central CSV
         save_type_annotations(df, types, Path(args.type_annotations_csv))
@@ -476,7 +476,7 @@ def main():
         pass_dir.mkdir(exist_ok=True)
         filtered_csv = pass_dir / 'kept_windows.csv'
         filtered_df[['File', 'Start Time (s)']].to_csv(filtered_csv, index=False)
-        print(f"  [{len(filtered_df)} windows kept → {filtered_csv}]")
+        print(f"  [{len(filtered_df)} windows kept: {filtered_csv}]")
 
         if action == 'save':
             sys.exit(0)

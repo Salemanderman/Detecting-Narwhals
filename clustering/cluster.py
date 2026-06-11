@@ -44,15 +44,14 @@ from clustering_plots import (plot_clusters, plot_cluster_sizes, save_cluster_gr
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Cluster PCA windows — outliers-only or all windows.")
+        description="Cluster PCA windows: outliers-only or all windows.")
     # Paths
     ap.add_argument("--pca-root",     required=True,  help="Directory containing pca_results.npz")
     ap.add_argument("--output-root",  required=True)
     ap.add_argument("--outliers-csv", default=None,
-                    help="If given, cluster only these detected outliers; "
-                         "if omitted, cluster every window in pca_results.npz")
+                    help="Cluster only these outliers (default: all windows)")
     ap.add_argument("--npz-root",     default=None,
-                    help="Spectrogram .npz directory (needed for spectrogram grid plots)")
+                    help="Spectrogram .npz directory (for grid plots)")
     # Algorithm
     ap.add_argument("--algorithm",   default="kmeans",
                     choices=["kmeans", "hdbscan", "dpmm"])
@@ -60,12 +59,12 @@ def main():
     ap.add_argument("--seed",         type=int, default=42)
     ap.add_argument("--min-cluster-size",    type=int,   default=10)
     ap.add_argument("--dpmm-max-components", type=int,   default=20,
-                    help="DPMM upper bound on clusters (default: 20, unused ones shrink to 0)")
+                    help="DPMM max clusters (default: 20)")
     ap.add_argument("--dpmm-concentration",  type=float, default=0.01,
-                    help="DPMM concentration parameter α (lower = fewer clusters, default: 0.01)")
+                    help="DPMM concentration α (default: 0.01)")
     # Spectrogram grids
     ap.add_argument("--page-size", type=int, default=30,
-                    help="Spectrograms per grid page — all windows are saved across as many pages as needed (default: 30)")
+                    help="Spectrograms per grid page (default: 30)")
     ap.add_argument("--n-cols", type=int, default=None,
                     help="Columns per row in spectrogram grid plots (default: 6)")
     # Spectrogram
@@ -87,7 +86,6 @@ def main():
     with open(output_root / "run_config.json", "w") as f:
         json.dump(vars(args), f, indent=2)
 
-    # ── Load PCA ────────────────────────────────────────────────────────────
     pca_file = Path(args.pca_root) / "pca_results.npz"
     if not pca_file.exists():
         raise FileNotFoundError(f"pca_results.npz not found in {args.pca_root}")
@@ -95,7 +93,6 @@ def main():
     X_pca = pca_data["X_pca"]
     progress.update(1)
 
-    # ── Build DataFrame ──────────────────────────────────────────────────────
     window_files  = np.array(pca_data["window_files"], dtype=str)
     window_secs   = pca_data["window_start_secs"].astype(float)
     window_frames = pca_data["window_start_frames"].astype(int)
@@ -113,7 +110,7 @@ def main():
                 keep_rows.append(i)
         skipped = len(df) - len(indices)
         if skipped:
-            print(f"  [warn] {skipped} rows in outliers CSV not found in pca_results — skipped")
+            print(f"  [warn] {skipped} rows in outliers CSV not found in pca_results, skipped")
         indices = np.array(indices, dtype=int)
         df      = df.iloc[keep_rows].reset_index(drop=True)
         print(f"Mode: outliers ({len(indices)} windows from {args.outliers_csv})")
@@ -135,14 +132,12 @@ def main():
     if args.algorithm == "kmeans" and n < args.n_clusters:
         raise ValueError(f"Fewer windows ({n}) than clusters ({args.n_clusters}).")
 
-    # ── Build feature matrix ─────────────────────────────────────────────────
     X_feat       = X_pca[indices].astype(np.float32)
     feature_desc = f"pca({X_pca.shape[1]})"
 
     X_norm = StandardScaler().fit_transform(X_feat)
     progress.update(1)
 
-    # ── Cluster ──────────────────────────────────────────────────────────────
     print(f"\nClustering {n} windows  features={feature_desc}  algorithm={args.algorithm}  k={args.n_clusters}")
     labels  = run_clustering(X_norm, args)
     k       = int(labels.max()) + 1
@@ -155,7 +150,6 @@ def main():
     if n_noise:
         print(f"  Noise:     {n_noise:5d} windows  ({100*n_noise/n:.1f}%)")
 
-    # ── Save CSVs ────────────────────────────────────────────────────────────
     df["cluster"] = labels
     df.to_csv(output_root / out_csv, index=False)
     print(f"\n[csv] {output_root / out_csv}")
@@ -165,13 +159,11 @@ def main():
     print(f"\n{summary.to_string(index=False)}")
     progress.update(1)
 
-    # ── Plots ────────────────────────────────────────────────────────────────
     if not args.no_plot:
         plot_clusters(X_pca[indices, :2], labels, k, args.algorithm,
                       output_root / "cluster_scatter.png", n_total=n)
         plot_cluster_sizes(labels, k, output_root / "cluster_sizes.png")
 
-    # ── Validation recall ────────────────────────────────────────────────────
     if args.validation_csv:
         val_path = Path(args.validation_csv)
         if not val_path.exists():
@@ -182,7 +174,6 @@ def main():
             val_df.to_csv(output_root / "validation_recall.csv", index=False)
             print(val_df.to_string(index=False))
 
-    # ── Spectrogram grids ────────────────────────────────────────────────────
     if not args.no_plot and args.npz_root:
         npz_root = Path(args.npz_root)
         if not npz_root.exists():

@@ -1,12 +1,12 @@
 """
-UMAP embedding — drop-in replacement for pca_sliding_window.py.
+UMAP embedding: drop-in replacement for pca_sliding_window.py.
 
-Writes pca_results.npz with the same keys so cluster.py, finding_outliers.py,
-and ensemble_cluster.py all work unchanged.
+Writes pca_results.npz with the same keys so cluster.py and finding_outliers.py
+work unchanged.
 
 Feature modes:
-  mean_std  — mean + std per mel bin
-  mfcc      — 2*n_mfcc MFCC coefficients (mean + std)
+  mean_std: mean + std per mel bin
+  mfcc:     2*n_mfcc MFCC coefficients (mean + std)
 
 Iterative clustering: use --filter-csv to re-embed only a subset of windows
 (e.g. pass the narwhal cluster CSV to re-run UMAP on just those windows).
@@ -20,7 +20,7 @@ Usage:
         --n-components 10 \
         --feature-mode mfcc
 
-    # Iterative pass — re-embed only a kept subset
+    # Iterative pass: re-embed only a kept subset
     python analysis/umap_embedding.py \
         --npz-root  output/mixedDataset/melBins/towsey/npz \
         --output-root output/mixedDataset/melBins/towsey/umap_iter2 \
@@ -195,7 +195,7 @@ def main():
         n_components=int(X_umap.shape[1]),
         norm_mean=norm_mean,
         norm_std=norm_std,
-        reduction_method="umap" if args.feature_mode != "passthrough" else "passthrough",
+        reduction_method="umap",
         umap_n_neighbors=args.n_neighbors,
         umap_min_dist=args.min_dist,
         umap_metric=args.metric,

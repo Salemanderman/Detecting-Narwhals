@@ -1,6 +1,6 @@
 """
 Shared clustering algorithms, feature extraction, and evaluation metrics.
-No matplotlib — pure computation only.
+No matplotlib, pure computation only.
 """
 
 import numpy as np

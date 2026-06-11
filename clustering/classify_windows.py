@@ -76,9 +76,7 @@ def predict_windows(df: pd.DataFrame, npz_index: dict, payload: dict) -> pd.Data
 
 def cluster_summary(df: pd.DataFrame, confidence_threshold: float):
     """Print a per-cluster summary if a cluster column exists, otherwise per-type."""
-    print(f"\n{'─'*62}")
-    print(f"  Prediction summary  (confidence threshold: {confidence_threshold:.0%})")
-    print(f"{'─'*62}")
+    print(f"\nPrediction summary (confidence threshold: {confidence_threshold:.0%})")
 
     if "cluster" in df.columns:
         for cid in sorted(df["cluster"].unique()):
@@ -96,10 +94,10 @@ def cluster_summary(df: pd.DataFrame, confidence_threshold: float):
                 flags.append("MIXED")
             if mean_conf < confidence_threshold:
                 flags.append("UNCERTAIN")
-            flag_str = "  ⚑ " + " + ".join(flags) if flags else ""
+            flag_str = "  " + " + ".join(flags) if flags else ""
 
             dist = "  ".join(f"{t}:{c}" for t, c in type_counts.items())
-            print(f"  {name:12s}  n={n:4d}  → {top_type:12s} ({top_frac:.0%})  conf={mean_conf:.2f}{flag_str}")
+            print(f"  {name:12s}  n={n:4d}  {top_type:12s} ({top_frac:.0%})  conf={mean_conf:.2f}{flag_str}")
             if len(type_counts) > 1:
                 print(f"              distribution: {dist}")
     else:
@@ -107,7 +105,7 @@ def cluster_summary(df: pd.DataFrame, confidence_threshold: float):
             sub       = df[df["predicted_type"] == t]
             mean_conf = sub["type_confidence"].mean()
             low_frac  = (sub["type_confidence"] < confidence_threshold).mean()
-            flag = "  ⚑ UNCERTAIN" if mean_conf < confidence_threshold else ""
+            flag = "  UNCERTAIN" if mean_conf < confidence_threshold else ""
             print(f"  {t:14s}  n={n:5d}  ({n/len(df):.0%})  conf={mean_conf:.2f}{flag}")
 
     n_low = (df["type_confidence"] < confidence_threshold).sum()
@@ -156,7 +154,7 @@ def main():
     output_root.mkdir(parents=True, exist_ok=True)
     output_path = output_root / (windows_csv.stem + "_classified.csv")
     df_out.to_csv(output_path, index=False)
-    print(f"\nSaved → {output_path}")
+    print(f"\nSaved to {output_path}")
 
 
 if __name__ == "__main__":

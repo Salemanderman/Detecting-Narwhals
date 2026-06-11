@@ -2,9 +2,9 @@
 Visual comparison of plain vs Towsey preprocessing.
 
 Produces three figures:
-  Figure 1 — spectrogram grid: N windows side by side (plain left, Towsey right)
-  Figure 2 — monthly mean spectrum: one curve per month, plain vs Towsey panels
-  Figure 3 — PCA scatter coloured by days since first recording (continuous scale)
+  Figure 1: spectrogram grid, N windows side by side (plain left, Towsey right)
+  Figure 2: monthly mean spectrum, one curve per month, plain vs Towsey panels
+  Figure 3: PCA scatter coloured by days since first recording
 
 Requires two pipeline runs on the same audio:
   Run A: python run_outlier_pipeline.py  (plain)
@@ -63,7 +63,6 @@ def _save(fig, path):
         plt.show()
 
 
-# ── Figure 1: spectrogram grid ────────────────────────────────────────────────
 
 def plot_spectrogram_grid(npz_plain, npz_towsey, mel_start, mel_end,
                           window_secs, n_examples, output_path):
@@ -113,13 +112,12 @@ def plot_spectrogram_grid(npz_plain, npz_towsey, mel_start, mel_end,
         axes[row, 0].set_ylabel(dt_str, fontsize=9, rotation=0,
                                 labelpad=65, va="center")
 
-    fig.suptitle("Spectrogram comparison — plain vs Towsey  (same window, same file)",
+    fig.suptitle("Spectrogram comparison: plain vs Towsey  (same window, same file)",
                  fontsize=13, fontweight="bold")
     plt.tight_layout()
     _save(fig, output_path)
 
 
-# ── Figure 2: monthly mean spectrum ──────────────────────────────────────────
 
 def plot_monthly_mean_spectrum(npz_plain, npz_towsey, mel_start, mel_end, output_path):
 
@@ -162,14 +160,13 @@ def plot_monthly_mean_spectrum(npz_plain, npz_towsey, mel_start, mel_end, output
         ax.legend(title="Month", fontsize=9)
         ax.grid(True, alpha=0.3)
 
-    fig.suptitle("Monthly mean spectrum — plain vs Towsey\n"
+    fig.suptitle("Monthly mean spectrum: plain vs Towsey\n"
                  "(curves collapsing in Towsey panel = seasonal noise floor removed)",
                  fontsize=13, fontweight="bold")
     plt.tight_layout()
     _save(fig, output_path)
 
 
-# ── Figure 3: PCA scatter coloured by days since first ───────────────────────
 
 def plot_pca_time_colour(pca_root_plain, pca_root_towsey, output_path):
 
@@ -215,7 +212,6 @@ def plot_pca_time_colour(pca_root_plain, pca_root_towsey, output_path):
     _save(fig, output_path)
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
     ap = argparse.ArgumentParser(

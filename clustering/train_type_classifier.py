@@ -88,10 +88,8 @@ def main():
         print("[error] No labelled annotations found or all are unknown.")
         sys.exit(1)
 
-    # Drop types with fewer than CV_FOLDS examples. Stratified k-fold CV (below)
-    # requires every class to have at least one example in each of the k folds,
-    # so a class with < k examples — and especially a singleton — makes
-    # cross_val_score fail. Free-text labels make stray rare types easy to create.
+    # Drop types with fewer than CV_FOLDS examples: stratified k-fold needs at
+    # least k per class, and a singleton class makes cross_val_score fail.
     CV_FOLDS = 5
     counts = annotations["type"].value_counts()
     rare   = counts[counts < CV_FOLDS].index.tolist()
@@ -139,7 +137,7 @@ def main():
         "n_train":    len(X),
     }
     joblib.dump(payload, output_path)
-    print(f"\nModel saved → {output_path}")
+    print(f"\nModel saved to {output_path}")
     print(f"  Classes: {list(clf.classes_)}")
 
 

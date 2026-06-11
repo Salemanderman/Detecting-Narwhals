@@ -1,6 +1,6 @@
 """
 All matplotlib plot/save functions for clustering.
-No algorithm logic here — import from clustering_core instead.
+No algorithm logic here, import from clustering_core instead.
 """
 
 import numpy as np
@@ -110,7 +110,7 @@ def plot_elbow(X_norm, max_k, seed, n_init, save_path):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
     ax1.plot(ks, inertias, marker="o", color="#2196F3", linewidth=2)
     ax1.set_ylabel("Inertia  (lower = more compact)", fontsize=11)
-    ax1.set_title("Elbow + silhouette — choose k", fontsize=13, fontweight="bold")
+    ax1.set_title("Elbow + silhouette: choose k", fontsize=13, fontweight="bold")
     ax1.grid(True, alpha=0.3, linestyle="--")
     ax2.plot(ks, sil_scores, marker="o", color="#FF9800", linewidth=2)
     best_k = ks[sil_scores.index(max(sil_scores))]
@@ -128,11 +128,7 @@ def plot_elbow(X_norm, max_k, seed, n_init, save_path):
 
 def save_cluster_grid(cluster_df, cluster_id, npz_root, window_frames, spec_cfg,
                       save_path, mel_start=None, mel_end=None, page_size=30, n_cols=None):
-    """Save all windows in a cluster as paginated spectrogram grids.
-
-    Single page  → spectrogram_grid.png
-    Multiple pages → spectrogram_grid_1.png, spectrogram_grid_2.png, …
-    """
+    """Save a cluster's windows as paginated spectrogram grids."""
     n = len(cluster_df)
     if n == 0:
         return
@@ -172,7 +168,7 @@ def save_cluster_grid(cluster_df, cluster_id, npz_root, window_frames, spec_cfg,
             title    = f"{label}  ({n} windows)"
             out_path = save_path
         else:
-            title    = f"{label}  (page {page + 1}/{n_pages}  ·  {n} windows total)"
+            title    = f"{label}  (page {page + 1}/{n_pages}, {n} windows total)"
             out_path = save_path.parent / f"{save_path.stem}_{page + 1}{save_path.suffix}"
 
         fig.suptitle(title, fontsize=12, fontweight="bold")

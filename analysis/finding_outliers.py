@@ -257,7 +257,7 @@ def main():
     ap.add_argument("--distance-metric", choices=["euclidean", "mahalanobis"], default="mahalanobis",
                     help="Distance metric for outlier detection (default: mahalanobis).")
     ap.add_argument("--threshold-percentile", type=float, default=95.0,
-                    help="Percentile cutoff — flag top (100-p)%% most anomalous windows (default: 95.0).")
+                    help="Flag the top (100-p)%% most distant windows (default: 95.0).")
     ap.add_argument("--window-secs", type=float, default=5.0,
                     help="Window length in seconds for spectrogram plots (default: 5.0).")
     ap.add_argument("--mel-start", type=int, default=11,

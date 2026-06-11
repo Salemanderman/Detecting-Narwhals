@@ -73,7 +73,7 @@ def save_type_grid(type_df: pd.DataFrame, type_label: str, npz_root: Path,
             title    = f"{type_label}  ({n} windows)"
             out_path = output_dir / "spectrogram_grid.png"
         else:
-            title    = f"{type_label}  (page {page + 1}/{n_pages}  ·  {n} windows total)"
+            title    = f"{type_label}  (page {page + 1}/{n_pages}, {n} windows total)"
             out_path = output_dir / f"spectrogram_grid_{page + 1}.png"
 
         fig.suptitle(title, fontsize=12, fontweight="bold")
@@ -115,7 +115,7 @@ def main():
         low_conf = df["type_confidence"] < args.min_confidence
         df.loc[low_conf, "predicted_type"] = "uncertain"
         print(f"Windows below confidence {args.min_confidence:.0%} "
-              f"→ 'uncertain'  ({low_conf.sum()} windows)")
+              f"marked 'uncertain'  ({low_conf.sum()} windows)")
 
     all_types = sorted(df["predicted_type"].unique())
     print(f"\nType distribution:")
@@ -151,7 +151,7 @@ def main():
         out_dir  = output_root / t
         save_type_grid(sub, t, npz_root, out_dir, window_frames, spec_cfg,
                        args.mel_start, args.mel_end, args.page_size)
-        tqdm.write(f"  [{t}] {len(sub)} windows → {out_dir}")
+        tqdm.write(f"  [{t}] {len(sub)} windows to {out_dir}")
 
     print(f"\n[done] {output_root}")
 
