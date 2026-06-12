@@ -19,7 +19,8 @@ Detecting-Narwhals/
 --------...  
 --------audiofileN.wav  
 ----preprocessing/  
-----analysis/  
+----analysis/
+----clustering/  
 ----utilities/  
 ----environment.yml  
 ----README.md  
@@ -88,13 +89,13 @@ $ python analysis/pca_sliding_window.py \
         --npz-root  processedDataNPZFiles \
         --output-root analysis/pca_output \
         --window-secs 5 \
-        --stride-secs 2.5 \
-        --mel-start 9 --mel-end 61 \
-        --n-components 50
+        --stride-secs 5.0 \
+        --mel-start 11 --mel-end 128 \
+        --n-components 20
 ```
 For Windows:  
 ```bash
-$ python analysis\pca_sliding_window.py --npz-root processedDataNPZFiles --output-root analysis\pca_output --window-secs 5 --stride-secs 2.5 --mel-start 9 --mel-end 61 --n-components 50
+$ python analysis\pca_sliding_window.py --npz-root processedDataNPZFiles --output-root analysis\pca_output --window-secs 5 --stride-secs 5.0 --mel-start 11 --mel-end 128 --n-components 20
 ```
 If just a single file, add the --single-file and provide the filename
 
@@ -108,58 +109,82 @@ npz root is the path to the produced npz files from the extraction step.
 
 ```bash
 python analysis/finding_outliers.py \
-        --pca-root subsetWithValidatedCalls/pca_output \
-        --npz-root subsetWithValidatedCalls/npzFiles \
+        --pca-root analysis/pca_output \
+        --npz-root processedDataNPZFiles \
         --distance-metric mahalanobis \
-        --threshold-std 3 \
-        --plots-root analysis/outlier_plots \
-        --save-csv \
-        --mel-start 9 \
-        --mel-end 61
+        --threshold-percentile 95 \
+        --output-root analysis/outlier_plots \
+        --mel-start 11 \
+        --mel-end 128
 ```
 
+The outliers.csv and a report are saved by default. Add `--plot` to also save spectrogram plots, and `--audio-root <path-to-wav-files>` to save audio clips of each outlier.
 
-## Cluster the outliers using k-means
 
-Once you have detected outliers, you can perform k-means clustering on them to group similar types of outliers:
+## Cluster the outliers
+
+Once you have detected outliers, you can cluster them to group similar types together:
 
 ```bash
-python analysis/cluster_outliers.py \
-        --outliers-csv analysis/outlier_plots/outliers.csv \
+python clustering/cluster.py \
         --pca-root analysis/pca_output \
-        --output-root analysis/outlier_clusters \
-        --n-clusters 3 \
-        --cluster-dims 10
+        --outliers-csv analysis/outlier_plots/outliers.csv \
+        --output-root analysis/clusters \
+        --npz-root processedDataNPZFiles \
+        --algorithm kmeans --n-clusters 5
 ```
 
-This creates:
-- `outliers_clustered.csv`: Original outlier data with cluster assignments added
-- `outlier_cluster_results.npz`: K-means results (labels, centroids, inertia)
-- `outlier_clusters.png`: Visualization of clusters in PCA space
+This writes `clusters.csv` (each outlier with its cluster), a scatter plot, and a spectrogram grid per cluster.
 
 You can adjust:
-- `--n-clusters`: Number of outlier groups to find (default: 3)
-- `--cluster-dims`: How many leading PCA dimensions to use for clustering (default: 10)
+- `--algorithm`: `kmeans`, `hdbscan`, or `dpmm`
+- `--n-clusters`: number of clusters for k-means (default: 7)
 
 
-## Sweep cluster counts and compare with validated calls
+## Review clusters and label them
 
-To run clustering for `k=3` through `k=15`, save each plot, and write a summary that
-looks like `Cluster 3: 31 outliers, 18 validated`, run:
+To step through each cluster, look at its spectrogram grid, and label it keep or remove (and optionally a call type such as clicks or tonal):
 
 ```bash
-python analysis/sweep_outlier_clusters.py
+python clustering/interactive_cluster_review.py \
+        --pca-root analysis/pca_output \
+        --npz-root processedDataNPZFiles \
+        --output-root analysis/review \
+        --strategy d --mel-start 11 --mel-end 128
 ```
 
-By default this uses:
-- `output/pipeline_result/outliers/outliers.csv`
-- `analysis/pca_output/pca_results.npz`
-- `evaluation/validatedChristerCalls.csv`
+Labels are saved as you go and can be reused to train a classifier.
 
-It writes the per-`k` clustering outputs into
-`output/pipeline_result/outlier_clusters_sweep/k_<k>/` and saves the combined
-comparison report as `validated_cluster_comparison.txt` and
-`validated_cluster_comparison.csv` in the sweep output directory.
+
+## Train a type classifier and classify windows
+
+Train a random forest on the labelled clusters:
+
+```bash
+python clustering/train_type_classifier.py \
+        --annotations-csv analysis/review/type_annotations.csv \
+        --npz-root processedDataNPZFiles \
+        --output-root evaluation
+```
+
+Then predict the type of any window list containing `File` and `Start Time (s)` columns:
+
+```bash
+python clustering/classify_windows.py \
+        --windows-csv analysis/outlier_plots/outliers.csv \
+        --npz-root processedDataNPZFiles \
+        --output-root analysis/classified
+```
+
+And save spectrogram grids grouped by predicted type to check them:
+
+```bash
+python clustering/plot_classified_grids.py \
+        --classified-csv analysis/classified/clusters_classified.csv \
+        --npz-root processedDataNPZFiles \
+        --output-root analysis/classified_grids \
+        --types clicks tonal
+```
 
 
 ## Running the full pipeline for outlier detection with pca with Standard Config
@@ -172,8 +197,8 @@ The `run_outlier_pipeline.py` file runs the complete outlier detection pipeline:
 
 ### Setup
 
-The default configuration is stored in `pipeline_config.py` at the project root.  
-Customize the file `get_pipeline_config()` to adjust to your setup.  
+The default configuration is stored in `utilities/configs.py`.  
+Customize `get_pipeline_config()` to adjust to your setup.  
 
 Default configuration includes:
 - **Input/output paths**: where to read audio files and save results
@@ -184,7 +209,7 @@ Default configuration includes:
 
 ### Running with Default Config
 
-When `pipeline_config.py` is set up with desired defaults, run by executing:
+When `utilities/configs.py` is set up with desired defaults, run by executing:
 
 ```bash
 $ python run_outlier_pipeline.py
@@ -197,7 +222,7 @@ This will use all the default values from `utilities/configs.py`.
 You can override any default parameter using command-line flags:
 
 ```bash
-$ python run_outlier_pipeline.py --threshold-std 4.0 --no-plot
+$ python run_outlier_pipeline.py --threshold-percentile 95 --no-plot
 ```
 
 ### Skipping Pipeline Steps
@@ -216,12 +241,12 @@ $ python run_outlier_pipeline.py \
     --audio-root data/subsetWithValidatedCalls \
     --output-root output/pipeline_results \
     --window-secs 5 \
-    --mel-start 9 --mel-end 61 \
+    --mel-start 11 --mel-end 128 \
     --n-components 20 \
-    --threshold-std 3
+    --threshold-percentile 95
 
 # Re-run outlier detection with different threshold (skip extraction and PCA)
-$ python run_outlier_pipeline.py --skip-extraction --skip-pca --threshold-std 4
+$ python run_outlier_pipeline.py --skip-extraction --skip-pca --threshold-percentile 97
 ```
 
 ### Output
@@ -231,4 +256,21 @@ The pipeline creates three subdirectories in the output root:
 - `pca/`: PCA results and visualizations
 - `outliers/`: Outlier detections, plots, audio clips, and CSV files
 
+
+## Evaluate against the validated calls
+
+Compare detected outliers against the hand-labelled calls in `evaluation/validatedChristerCalls.csv`:
+
+```bash
+python evaluation/compareChristerCalls.py \
+        --outliers-csv analysis/outlier_plots/outliers.csv \
+        --validation-csv evaluation/validatedChristerCalls.csv
+```
+
+This prints recall, precision, and F1, plus which calls were matched and missed.
+
+
+## Autoencoder anomaly detection
+
+An alternative detector based on a convolutional autoencoder lives in the notebook `analysis/autoencoder_anomaly_detection.ipynb`. It trains on the spectrogram windows and flags the ones with high reconstruction error.
 

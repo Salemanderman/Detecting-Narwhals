@@ -88,8 +88,7 @@ def main():
         print("[error] No labelled annotations found or all are unknown.")
         sys.exit(1)
 
-    # Drop types with fewer than CV_FOLDS examples: stratified k-fold needs at
-    # least k per class, and a singleton class makes cross_val_score fail.
+
     CV_FOLDS = 5
     counts = annotations["type"].value_counts()
     rare   = counts[counts < CV_FOLDS].index.tolist()
@@ -115,8 +114,6 @@ def main():
     )
 
     print(f"\nCross-validation ({CV_FOLDS}-fold)...")
-    # Secondary guard: feature extraction may skip rows (missing/short files), so a
-    # class can shrink below CV_FOLDS even after the rare-type filter above.
     min_class_count = int(np.unique(y, return_counts=True)[1].min())
     cv = min(CV_FOLDS, min_class_count)
     scores = cross_val_score(clf, X, y, cv=cv, scoring="balanced_accuracy")
